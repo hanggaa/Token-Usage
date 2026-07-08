@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.vscode-test/
+*.vsix
+.superpowers/
+.token-usage-tracker/
+*.log
+

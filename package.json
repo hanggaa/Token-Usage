@@ -1,0 +1,181 @@
+{
+  "name": "token-usage-tracker",
+  "displayName": "Token Usage Tracker",
+  "description": "Private, local token usage tracking for Codex CLI, OpenCode CLI, and Antigravity IDE.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "tokens",
+    "codex",
+    "opencode",
+    "antigravity",
+    "usage"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:tokenUsage.dashboard",
+    "onCommand:tokenUsage.openDashboard",
+    "onCommand:tokenUsage.refresh",
+    "onCommand:tokenUsage.rebuildIndex",
+    "onCommand:tokenUsage.showDiagnostics",
+    "onCommand:tokenUsage.deleteAllData"
+  ],
+  "main": "./dist/extension.cjs",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tokenUsage",
+          "title": "Token Usage",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "tokenUsage": [
+        {
+          "id": "tokenUsage.dashboard",
+          "name": "Dashboard",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tokenUsage.openDashboard",
+        "title": "Token Usage: Open Dashboard",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "tokenUsage.refresh",
+        "title": "Token Usage: Refresh Now",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tokenUsage.rebuildIndex",
+        "title": "Token Usage: Rebuild Local Index"
+      },
+      {
+        "command": "tokenUsage.showDiagnostics",
+        "title": "Token Usage: Show Import Diagnostics"
+      },
+      {
+        "command": "tokenUsage.deleteAllData",
+        "title": "Token Usage: Delete All Tracker Data"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "tokenUsage.refresh",
+          "when": "view == tokenUsage.dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "tokenUsage.showDiagnostics",
+          "when": "view == tokenUsage.dashboard",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Token Usage Tracker",
+      "properties": {
+        "tokenUsage.sources.codex.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Import Codex CLI sessions."
+        },
+        "tokenUsage.sources.opencode.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Import OpenCode CLI sessions."
+        },
+        "tokenUsage.sources.antigravity.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Import Antigravity IDE sessions."
+        },
+        "tokenUsage.paths.codex": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Codex data-root override."
+        },
+        "tokenUsage.paths.opencode": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OpenCode data-root override."
+        },
+        "tokenUsage.paths.antigravity": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Antigravity data-root override."
+        },
+        "tokenUsage.storagePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional shared tracker-database path override."
+        },
+        "tokenUsage.refreshIntervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "Background refresh interval while the IDE is open."
+        },
+        "tokenUsage.promptRetention": {
+          "type": "string",
+          "enum": [
+            "full",
+            "countsOnly"
+          ],
+          "default": "full",
+          "description": "Whether future imports retain prompt and visible response text."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "package": "npm run build && vsce package --no-dependencies",
+    "verify": "npm run test && npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.21",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.15.30",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/sql.js": "^1.4.9",
+    "@types/vscode": "^1.90.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vscode/vsce": "^3.5.0",
+    "esbuild": "^0.25.5",
+    "jsdom": "^26.1.0",
+    "playwright": "^1.61.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
+  }
+}
