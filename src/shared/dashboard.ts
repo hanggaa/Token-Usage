@@ -5,6 +5,7 @@ export interface UsageSummary {
   total: number;
   exact: number;
   estimated: number;
+  partial: number;
 }
 
 export interface TrendPoint {
@@ -12,6 +13,7 @@ export interface TrendPoint {
   codex: number | null;
   opencode: number | null;
   antigravity: number | null;
+  partialSources?: Source[];
 }
 
 export interface DashboardSnapshot {
@@ -37,4 +39,3 @@ export interface ExtensionMessage {
 }
 
 export const SOURCES: Source[] = ["codex", "opencode", "antigravity"];
-

@@ -2,8 +2,9 @@
   "name": "token-usage-tracker",
   "displayName": "Token Usage Tracker",
   "description": "Private, local token usage tracking for Codex CLI, OpenCode CLI, and Antigravity IDE.",
-  "version": "0.1.0",
-  "publisher": "local",
+  "version": "0.2.1",
+  "publisher": "hadii",
+  "icon": "media/icon.png",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -124,12 +125,17 @@
           "default": "",
           "description": "Optional shared tracker-database path override."
         },
+        "tokenUsage.backgroundRefresh.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run full source-history imports in the background. Disabled by default to conserve battery; manual refresh still imports all persisted history."
+        },
         "tokenUsage.refreshIntervalMinutes": {
           "type": "number",
-          "default": 5,
-          "minimum": 1,
+          "default": 30,
+          "minimum": 5,
           "maximum": 1440,
-          "description": "Background refresh interval while the IDE is open."
+          "description": "Background import interval when background refresh is enabled."
         },
         "tokenUsage.promptRetention": {
           "type": "string",
@@ -145,6 +151,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "render:icon": "node scripts/render-icon.mjs",
     "watch": "node scripts/build.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
     "test": "vitest run",

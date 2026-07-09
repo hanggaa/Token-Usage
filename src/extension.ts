@@ -1,4 +1,3 @@
-import { watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as vscode from "vscode";
@@ -13,6 +12,7 @@ import {
   ImportCoordinator,
   type PromptRetention
 } from "./services/import-coordinator.js";
+import { startRefreshScheduler } from "./services/refresh-scheduler.js";
 import { TrackerStore } from "./storage/tracker-store.js";
 import {
   DashboardWebviewProvider,
@@ -91,8 +91,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await store.getHealth()
     );
     provider.update(snapshot);
-    const approximate = snapshot.summaries.today.estimated > 0 ? "≈" : "";
-    status.text = `$(pulse) Tokens ${approximate}${formatStatusTokens(snapshot.summaries.today.total)}`;
+    const prefix =
+      snapshot.summaries.today.partial > 0
+        ? "≥"
+        : snapshot.summaries.today.estimated > 0
+          ? "≈"
+          : "";
+    status.text = `$(pulse) Tokens ${prefix}${formatStatusTokens(snapshot.summaries.today.total)}`;
     status.tooltip = `${snapshot.summaries.today.total.toLocaleString()} tracked tokens today`;
   };
 
@@ -193,40 +198,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  const watchers: FSWatcher[] = [];
-  let watchTimer: NodeJS.Timeout | null = null;
-  for (const root of [codexRoot, openCodeRoot, antigravityRoot, defaults.antigravityLegacy]) {
-    try {
-      const watcher = watch(root, { recursive: true }, () => {
-        if (watchTimer) {
-          clearTimeout(watchTimer);
-        }
-        watchTimer = setTimeout(() => void refresh(), 2_000);
-      });
-      watchers.push(watcher);
-    } catch {
-      output.appendLine(`Watcher unavailable for ${root}; interval refresh remains active.`);
+  const backgroundRefreshEnabled = configuration.get<boolean>(
+    "backgroundRefresh.enabled",
+    false
+  );
+  const refreshScheduler = startRefreshScheduler(
+    () => void refresh(),
+    {
+      enabled: backgroundRefreshEnabled,
+      intervalMinutes: configuration.get<number>("refreshIntervalMinutes", 30)
     }
+  );
+  context.subscriptions.push(refreshScheduler);
+
+  if (backgroundRefreshEnabled) {
+    void refresh();
+  } else {
+    output.appendLine(
+      "Background imports are disabled to conserve battery. Use Refresh Now to import source history."
+    );
   }
-  context.subscriptions.push({
-    dispose: () => {
-      for (const watcher of watchers) {
-        watcher.close();
-      }
-      if (watchTimer) {
-        clearTimeout(watchTimer);
-      }
-    }
-  });
-
-  const intervalMinutes = configuration.get<number>("refreshIntervalMinutes", 5);
-  const interval = setInterval(() => void refresh(), intervalMinutes * 60_000);
-  context.subscriptions.push({ dispose: () => clearInterval(interval) });
-
-  void refresh();
 }
 
 export function deactivate(): void {
   // VS Code disposes all registered resources through the extension context.
 }
-

@@ -7,7 +7,7 @@ A private VS Code-compatible extension that imports local usage history from:
 - Antigravity IDE
 
 The dashboard separates the text you typed from the full request context and
-marks every metric as exact, estimated, or unavailable.
+marks every metric as exact, estimated, partial lower bound, or unavailable.
 
 ## Privacy
 
@@ -26,21 +26,40 @@ marks every metric as exact, estimated, or unavailable.
 | --- | --- | --- |
 | Codex | Exact when reported in session JSONL | Offline estimate |
 | OpenCode | Exact from exported message usage | Offline estimate |
-| Antigravity | Estimated from visible text; full request input may be unavailable | Offline estimate |
+| Antigravity | Cumulative visible request context is a `≥` lower bound; visible output and exposed thinking are estimated; cache remains unavailable | Offline estimate from cleaned `<USER_REQUEST>` text |
 
 Cached-input and reasoning-output values are shown separately and are not
 double-counted in totals.
 
+Antigravity does not expose authoritative Gemini usage metadata in its local
+transcripts. Its lower bounds include observable prompt metadata, conversation
+history, tool calls, and tool results across model calls, but exclude unknown
+system context and caching.
+
 ## Install
 
-1. Build or download `token-usage-tracker-0.1.0.vsix`.
+1. Build or download `token-usage-tracker-0.2.1.vsix`.
 2. In VS Code or Antigravity, open Extensions.
 3. Choose **Install from VSIX…** and select the package.
 4. Open **Token Usage** from the Activity Bar or run
    **Token Usage: Open Dashboard**.
 
+After upgrading from an earlier version, run **Token Usage: Rebuild Local Index** once to
+replace previously stored Antigravity prompts with their cleaned versions.
+
 The VSIX is platform-neutral. The implementation includes Windows and macOS
 source paths and Antigravity process discovery.
+
+## Battery usage and refreshing
+
+Background imports are disabled by default. The source tools retain their own
+histories, so **Token Usage: Refresh Now** safely catches up whenever you want
+updated numbers without continuously scanning while you work.
+
+To opt into automatic imports, enable
+`tokenUsage.backgroundRefresh.enabled`. The default interval is 30 minutes and
+can be changed with `tokenUsage.refreshIntervalMinutes`. Recursive source-file
+watchers are not used.
 
 ## Commands
 
@@ -63,4 +82,3 @@ Visual QA uses:
 ```sh
 node scripts/visual-qa.mjs
 ```
-

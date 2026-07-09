@@ -168,6 +168,10 @@ tr:focus-visible {
   color: #36aeea;
 }
 
+.summary-split .partial {
+  color: #e0a22c;
+}
+
 .analytics-grid {
   display: grid;
   grid-template-columns: minmax(0, 2.4fr) minmax(245px, 1fr);
@@ -290,6 +294,14 @@ tr:focus-visible {
 
 .bar-segment {
   min-height: 0;
+}
+
+.bar-partial {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 4px,
+    rgb(255 255 255 / 24%) 4px 6px
+  );
 }
 
 .chart-column > span {
@@ -491,8 +503,12 @@ tbody tr.selected {
   color: #b1b4b6;
 }
 
-.quality-unavailable {
+.quality-partial {
   color: #e0a22c;
+}
+
+.quality-unavailable {
+  color: #888d90;
 }
 
 .empty-state {

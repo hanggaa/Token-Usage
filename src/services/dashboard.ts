@@ -36,7 +36,7 @@ function summarize(
   turns: NormalizedTurn[],
   minimumTimestamp: number
 ): UsageSummary {
-  const summary: UsageSummary = { total: 0, exact: 0, estimated: 0 };
+  const summary: UsageSummary = { total: 0, exact: 0, estimated: 0, partial: 0 };
   for (const turn of turns) {
     if (new Date(turn.timestamp).valueOf() < minimumTimestamp) {
       continue;
@@ -50,6 +50,8 @@ function summarize(
       summary.exact += metric.value;
     } else if (metric.quality === "estimated") {
       summary.estimated += metric.value;
+    } else if (metric.quality === "partial") {
+      summary.partial += metric.value;
     }
   }
   return summary;
@@ -96,6 +98,9 @@ export function buildDashboardSnapshot(
         source,
         values[source].seen ? values[source].value : null
       ])
+    ),
+    partialSources: SOURCES.filter((source) =>
+      values[source].qualities.has("partial")
     )
   })) as TrendPoint[];
 
@@ -111,4 +116,3 @@ export function buildDashboardSnapshot(
     health
   };
 }
-

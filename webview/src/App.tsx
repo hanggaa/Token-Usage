@@ -64,7 +64,9 @@ function formatMetric(metric?: TokenMetric): string {
   if (!metric || metric.value == null) {
     return "—";
   }
-  return `${metric.quality === "estimated" ? "≈" : ""}${numberFormatter.format(metric.value)}`;
+  const prefix =
+    metric.quality === "partial" ? "≥" : metric.quality === "estimated" ? "≈" : "";
+  return `${prefix}${numberFormatter.format(metric.value)}`;
 }
 
 function metricFor(turn: NormalizedTurn, kind: TokenKind): TokenMetric | undefined {
@@ -90,10 +92,12 @@ function SummaryCard({
 }) {
   const exactPercent = summary.total > 0 ? (summary.exact / summary.total) * 100 : 0;
   const estimatedPercent = summary.total > 0 ? (summary.estimated / summary.total) * 100 : 0;
+  const partialPercent = summary.total > 0 ? (summary.partial / summary.total) * 100 : 0;
   return (
     <section className={`summary-card accent-${accent}`}>
       <p className="summary-label">{label}</p>
       <div className="summary-value">
+        {summary.partial > 0 ? "≥" : ""}
         {numberFormatter.format(summary.total)}
         <span>tokens</span>
       </div>
@@ -103,6 +107,9 @@ function SummaryCard({
         </span>
         <span>
           Estimated: {numberFormatter.format(summary.estimated)} ({estimatedPercent.toFixed(1)}%)
+        </span>
+        <span className="partial">
+          Lower bound: {numberFormatter.format(summary.partial)} ({partialPercent.toFixed(1)}%)
         </span>
       </div>
     </section>
@@ -151,7 +158,9 @@ function TrendChart({ snapshot }: { snapshot: DashboardSnapshot }) {
                   return (
                     <div
                       key={source}
-                      className={`bar-segment source-${source}`}
+                      className={`bar-segment source-${source} ${
+                        point.partialSources?.includes(source) ? "bar-partial" : ""
+                      }`}
                       style={{ height: `${(value / maximum) * 100}%` }}
                     />
                   );
@@ -218,7 +227,13 @@ function Quality({ turn }: { turn: NormalizedTurn }) {
   return (
     <span
       className={`quality quality-${quality}`}
-      title={quality === "unavailable" ? "Total unavailable" : quality}
+      title={
+        quality === "unavailable"
+          ? "Total unavailable"
+          : quality === "partial"
+            ? "Lower bound from observable local context"
+            : quality
+      }
     >
       {quality === "unavailable" ? "—" : quality}
     </span>
@@ -406,9 +421,10 @@ export function App({ snapshot, loading, onRefresh }: AppProps) {
               {options.projects.map((item) => <option value={item!} key={item}>{projectName(item)}</option>)}
             </SelectFilter>
             <SelectFilter label="Quality" value={quality} onChange={(value) => { setQuality(value); setPage(0); }}>
-              <option value="all">Exact + estimated</option>
+              <option value="all">Exact + estimated + partial</option>
               <option value="exact">Exact</option>
               <option value="estimated">Estimated</option>
+              <option value="partial">Partial lower bound</option>
               <option value="unavailable">Unavailable</option>
             </SelectFilter>
           </div>

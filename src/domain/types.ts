@@ -1,6 +1,6 @@
 export type Source = "codex" | "opencode" | "antigravity";
 
-export type MeasurementQuality = "exact" | "estimated" | "unavailable";
+export type MeasurementQuality = "exact" | "estimated" | "partial" | "unavailable";
 
 export type TokenKind =
   | "typed_input"
@@ -76,4 +76,3 @@ export interface SourceAdapter {
   detect(): Promise<SourceAvailability>;
   scan(checkpoint?: SourceCheckpoint): Promise<ImportResult>;
 }
-

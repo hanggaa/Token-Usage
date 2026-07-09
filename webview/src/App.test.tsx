@@ -37,9 +37,9 @@ function fixtureTurn(
 const snapshot: DashboardSnapshot = {
   generatedAt: "2026-07-09T04:00:00.000Z",
   summaries: {
-    today: { total: 1_000, exact: 800, estimated: 200 },
-    sevenDays: { total: 5_000, exact: 4_000, estimated: 1_000 },
-    allTime: { total: 20_000, exact: 16_000, estimated: 4_000 }
+    today: { total: 1_050, exact: 800, estimated: 200, partial: 50 },
+    sevenDays: { total: 5_250, exact: 4_000, estimated: 1_000, partial: 250 },
+    allTime: { total: 21_000, exact: 16_000, estimated: 4_000, partial: 1_000 }
   },
   trend: [
     { date: "2026-07-08", codex: 200, opencode: 100, antigravity: null },
@@ -77,7 +77,8 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Token Usage" })).toBeInTheDocument();
     const todayCard = screen.getByText("Today").closest("section");
-    expect(within(todayCard!).getByText(/1[.,]000/u)).toBeInTheDocument();
+    expect(within(todayCard!).getByText(/≥1[.,]050/u)).toBeInTheDocument();
+    expect(within(todayCard!).getByText(/Lower bound:/u)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Daily usage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Import Health" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Token usage by turn" })).toBeInTheDocument();

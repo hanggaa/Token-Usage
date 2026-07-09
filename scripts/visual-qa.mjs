@@ -63,7 +63,7 @@ const prompts = [
 const turns = prompts.map((prompt, index) => {
   const source = sources[index % sources.length];
   const exact = source !== "antigravity";
-  const request = exact ? 3_812 + index * 173 : null;
+  const request = 3_812 + index * 173;
   const output = 873 + index * 91;
   return {
     id: `${source}:session-${index}:turn`,
@@ -81,11 +81,11 @@ const turns = prompts.map((prompt, index) => {
     fingerprint: `fixture-${index}`,
     metrics: [
       { kind: "typed_input", value: 140 + index * 19, quality: "estimated", basis: "offline estimate" },
-      { kind: "request_input", value: request, quality: exact ? "exact" : "unavailable", basis: "source usage" },
+      { kind: "request_input", value: request, quality: exact ? "exact" : "partial", basis: exact ? "source usage" : "visible context lower bound" },
       { kind: "cached_input", value: exact ? 8_732 + index * 240 : null, quality: exact ? "exact" : "unavailable", basis: "source cache" },
       { kind: "output", value: output, quality: exact ? "exact" : "estimated", basis: "visible output" },
-      { kind: "reasoning_output", value: exact ? index * 32 : null, quality: exact ? "exact" : "unavailable", basis: "source reasoning" },
-      { kind: "total", value: exact ? request + output : null, quality: exact ? "exact" : "unavailable", basis: "request + output" }
+      { kind: "reasoning_output", value: index * 32, quality: exact ? "exact" : "partial", basis: "exposed reasoning" },
+      { kind: "total", value: request + output, quality: exact ? "exact" : "partial", basis: "request + output" }
     ]
   };
 });
@@ -93,15 +93,16 @@ const turns = prompts.map((prompt, index) => {
 const snapshot = {
   generatedAt: new Date(2026, 6, 9, 11, 24, 30).toISOString(),
   summaries: {
-    today: { total: 1_842_357, exact: 1_302_891, estimated: 539_466 },
-    sevenDays: { total: 12_842_196, exact: 9_275_104, estimated: 3_567_092 },
-    allTime: { total: 98_421_583, exact: 71_232_991, estimated: 27_188_592 }
+    today: { total: 1_842_357, exact: 1_302_891, estimated: 339_466, partial: 200_000 },
+    sevenDays: { total: 12_842_196, exact: 9_275_104, estimated: 2_567_092, partial: 1_000_000 },
+    allTime: { total: 98_421_583, exact: 71_232_991, estimated: 22_188_592, partial: 5_000_000 }
   },
   trend: Array.from({ length: 14 }, (_, index) => ({
     date: `2026-07-${String(index + 1).padStart(2, "0")}`,
     codex: 650_000 + (index % 5) * 70_000,
     opencode: 420_000 + (index % 4) * 80_000,
-    antigravity: 250_000 + (index % 3) * 60_000
+    antigravity: 250_000 + (index % 3) * 60_000,
+    partialSources: ["antigravity"]
   })),
   turns,
   health: [

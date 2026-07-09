@@ -41,6 +41,16 @@ describe("calculateTotalMetric", () => {
     expect(result.quality).toBe("estimated");
   });
 
+  it("preserves lower-bound quality when either component is partial", () => {
+    const result = calculateTotalMetric([
+      metric("request_input", 800, "partial"),
+      metric("output", 200, "estimated")
+    ]);
+
+    expect(result.value).toBe(1_000);
+    expect(result.quality).toBe("partial");
+  });
+
   it("leaves total unavailable when full request input is unavailable", () => {
     const result = calculateTotalMetric([
       metric("typed_input", 50, "estimated"),
@@ -70,4 +80,3 @@ describe("estimateTypedInput", () => {
     expect(result.basis).toContain("offline OpenAI tokenizer");
   });
 });
-

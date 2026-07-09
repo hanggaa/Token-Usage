@@ -56,10 +56,11 @@ export function calculateTotalMetric(metrics: TokenMetric[]): TokenMetric {
     kind: "total",
     value: requestInput.value + output.value,
     quality:
-      requestInput.quality === "exact" && output.quality === "exact"
-        ? "exact"
-        : "estimated",
+      requestInput.quality === "partial" || output.quality === "partial"
+        ? "partial"
+        : requestInput.quality === "exact" && output.quality === "exact"
+          ? "exact"
+          : "estimated",
     basis: "request input + output"
   };
 }
-

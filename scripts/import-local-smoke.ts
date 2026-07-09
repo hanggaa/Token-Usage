@@ -31,6 +31,10 @@ try {
   );
   const results = await coordinator.refresh("full");
   const turns = await store.getTurns();
+  const antigravityTurns = turns.filter((turn) => turn.source === "antigravity");
+  const newestAntigravityTurn = antigravityTurns.toSorted((left, right) =>
+    right.timestamp.localeCompare(left.timestamp)
+  )[0];
   console.log(
     JSON.stringify(
       {
@@ -41,7 +45,24 @@ try {
           turns: result.turns.length,
           issues: result.issues.length
         })),
-        indexedTurns: turns.length
+        indexedTurns: turns.length,
+        antigravitySanitization: {
+          wrappedPrompts: antigravityTurns.filter((turn) =>
+            /<(?:USER_REQUEST|ADDITIONAL_METADATA|USER_SETTINGS_CHANGE)>/i.test(turn.prompt)
+          ).length,
+          turnsWithModel: antigravityTurns.filter((turn) => Boolean(turn.model)).length,
+          partialTotals: antigravityTurns.filter((turn) =>
+            turn.metrics.some(
+              (metric) => metric.kind === "total" && metric.quality === "partial"
+            )
+          ).length,
+          newestMetrics: Object.fromEntries(
+            (newestAntigravityTurn?.metrics ?? []).map((metric) => [
+              metric.kind,
+              { value: metric.value, quality: metric.quality }
+            ])
+          )
+        }
       },
       null,
       2
@@ -50,4 +71,3 @@ try {
 } finally {
   await rm(root, { recursive: true, force: true });
 }
-
