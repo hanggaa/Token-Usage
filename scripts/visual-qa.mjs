@@ -90,6 +90,60 @@ const turns = prompts.map((prompt, index) => {
   };
 });
 
+function makeInsights(startDate, endDate, total) {
+  const tokens = [Math.round(total * 0.55), Math.round(total * 0.3)];
+  tokens.push(total - tokens[0] - tokens[1]);
+  const ranked = (labels, paths = []) => labels.map((label, index) => ({
+    key: label.toLowerCase(),
+    label,
+    ...(paths[index] ? { fullLabel: paths[index] } : {}),
+    tokens: tokens[index],
+    share: tokens[index] / total,
+    partial: index === 1
+  }));
+  return {
+    startDate,
+    endDate,
+    total,
+    partial: true,
+    contributors: {
+      sources: ranked(["Codex", "OpenCode", "Antigravity"]),
+      projects: ranked(
+        ["token-usage", "notes", "Unknown"],
+        ["/Users/demo/work/token-usage", "/Users/demo/work/notes", undefined]
+      ),
+      models: ranked(["gpt-5", "claude-sonnet", "gemini-pro"])
+    },
+    heavyTurns: [
+      {
+        turnId: "heavy-1",
+        prompt: "Refactor import health detection",
+        source: "opencode",
+        model: "claude-sonnet",
+        project: "/Users/demo/work/token-usage",
+        total: 230_000,
+        quality: "exact",
+        baselineMedian: 100_000,
+        multiplier: 2.3,
+        baselineScope: "source-model"
+      },
+      {
+        turnId: "heavy-2",
+        prompt: "Generate release verification",
+        source: "codex",
+        model: "gpt-5",
+        project: "/Users/demo/work/token-usage",
+        total: 180_000,
+        quality: "estimated",
+        baselineMedian: 100_000,
+        multiplier: 1.8,
+        baselineScope: "source"
+      }
+    ],
+    hasComparableHistory: true
+  };
+}
+
 const snapshot = {
   generatedAt: new Date(2026, 6, 9, 11, 24, 30).toISOString(),
   summaries: {
@@ -143,6 +197,12 @@ const snapshot = {
     })
   },
   turns,
+  budgets: { daily: 2_000_000, weekly: 10_000_000, monthly: 40_000_000 },
+  insights: {
+    daily: makeInsights("2026-07-09", "2026-07-09", 1_842_357),
+    weekly: makeInsights("2026-07-06", "2026-07-12", 8_650_000),
+    monthly: makeInsights("2026-07-01", "2026-07-31", 31_800_000)
+  },
   health: [
     { source: "codex", complete: true, completedAt: new Date().toISOString(), sessionCount: 12, turnCount: 64, issues: [] },
     { source: "opencode", complete: true, completedAt: new Date().toISOString(), sessionCount: 9, turnCount: 48, issues: [] },
@@ -184,6 +244,15 @@ try {
   await page.getByText("Weekly", { exact: true }).click();
   await page.getByRole("radio", { name: "Weekly" }).check();
   await page.getByRole("img", { name: "Weekly token usage by source" }).waitFor();
+  await page.getByRole("heading", { name: "Usage Guardrails" }).waitFor();
+  await page.getByText("Approaching limit", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Edit budgets" }).click();
+  const budgetEditor = page.locator(".budget-editor");
+  await budgetEditor.getByLabel("Daily", { exact: true }).waitFor();
+  await budgetEditor.getByLabel("Weekly", { exact: true }).waitFor();
+  await budgetEditor.getByLabel("Monthly", { exact: true }).waitFor();
+  await budgetEditor.getByRole("button", { name: "Cancel" }).click();
+  await budgetEditor.waitFor({ state: "hidden" });
   await page.screenshot({ path: screenshotPath, fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
