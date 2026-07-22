@@ -11,7 +11,8 @@ function turn(
   model: string | null,
   project: string | null,
   total: number,
-  quality: MeasurementQuality
+  quality: MeasurementQuality,
+  metricValue: number | null = quality === "unavailable" ? null : total
 ): NormalizedTurn {
   return {
     id,
@@ -27,7 +28,7 @@ function turn(
     toolEventCount: 0,
     metrics: [{
       kind: "total",
-      value: quality === "unavailable" ? null : total,
+      value: metricValue,
       quality,
       basis: "fixture"
     }],
@@ -55,6 +56,18 @@ it("ranks three contributors with unknown grouping, shares, and partial flags", 
   expect(insights.contributors.models[0].share).toBeCloseTo(0.6);
   expect(insights.contributors.models.some((item) => item.label === "Unknown")).toBe(true);
   expect(insights.contributors.projects.find((item) => item.label === "app")?.fullLabel).toBe("/work/app");
+});
+
+it("excludes numeric unavailable totals from period totals and contributors", () => {
+  const insights = buildUsageInsights([
+    turn("exact", new Date(2026, 6, 22, 9), "codex", "gpt-5", "/work/app", 100, "exact"),
+    turn("unavailable", new Date(2026, 6, 22, 10), "opencode", "claude", "/work/api", 900, "unavailable", 900)
+  ], new Date(2026, 6, 22, 12)).daily;
+
+  expect(insights.total).toBe(100);
+  expect(insights.contributors.sources).toEqual([
+    expect.objectContaining({ label: "Codex", tokens: 100 })
+  ]);
 });
 
 it("uses source-model median first and source fallback second", () => {

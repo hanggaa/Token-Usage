@@ -16,6 +16,11 @@ function totalMetric(turn: NormalizedTurn): TokenMetric | undefined {
   return turn.metrics.find((metric) => metric.kind === "total");
 }
 
+function isUsableTotal(metric: TokenMetric | undefined): metric is TokenMetric & { value: number } {
+  return metric?.value != null
+    && (metric.quality === "exact" || metric.quality === "estimated" || metric.quality === "partial");
+}
+
 function timestampIn(turn: NormalizedTurn, start: Date, nextStart: Date): boolean {
   const value = new Date(turn.timestamp).valueOf();
   return value >= start.valueOf() && value < nextStart.valueOf();
@@ -50,7 +55,7 @@ function rankContributors(
   const groups = new Map<string, RankedContributor>();
   for (const turn of turns) {
     const metric = totalMetric(turn);
-    if (metric?.value == null) continue;
+    if (!isUsableTotal(metric)) continue;
     const identity = identityFor(turn);
     const existing = groups.get(identity.key) ?? {
       ...identity, tokens: 0, share: 0, partial: false
@@ -139,8 +144,8 @@ export function buildUsageInsights(
     const baselineTurns = turns.filter((turn) => timestampIn(turn, baselineStart, period.start));
     const usableMetrics = currentTurns
       .map((turn) => totalMetric(turn))
-      .filter((metric): metric is TokenMetric => metric?.value != null);
-    const total = usableMetrics.reduce((sum, metric) => sum + metric.value!, 0);
+      .filter(isUsableTotal);
+    const total = usableMetrics.reduce((sum, metric) => sum + metric.value, 0);
     const heavy = buildHeavyTurns(currentTurns, baselineTurns);
 
     return [granularity, {
