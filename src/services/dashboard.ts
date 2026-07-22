@@ -16,9 +16,7 @@ function startOfDay(date: Date): Date {
 }
 
 function addDays(date: Date, amount: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + amount);
-  return copy;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
 }
 
 function dateKey(date: Date): string {

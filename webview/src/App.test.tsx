@@ -206,4 +206,57 @@ describe("App", () => {
       cleanup();
     }
   });
+
+  it("renders deterministic English weekly labels and tooltips across month and year boundaries", async () => {
+    const nativeDateTimeFormat = Intl.DateTimeFormat;
+    vi.resetModules();
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      return new nativeDateTimeFormat(locales ?? "id-ID", options);
+    } as typeof Intl.DateTimeFormat);
+
+    const { App: LocaleApp } = await import("./App.js");
+    const boundarySnapshot: DashboardSnapshot = {
+      ...snapshot,
+      trends: {
+        ...snapshot.trends,
+        weekly: [
+          {
+            startDate: "2026-07-27",
+            endDate: "2026-08-02",
+            inProgress: false,
+            codex: 200,
+            opencode: 100,
+            antigravity: 50
+          },
+          {
+            startDate: "2026-12-28",
+            endDate: "2027-01-03",
+            inProgress: false,
+            codex: 600,
+            opencode: 200,
+            antigravity: 50
+          }
+        ]
+      }
+    };
+
+    render(
+      <LocaleApp
+        snapshot={boundarySnapshot}
+        loading={false}
+        onRefresh={() => undefined}
+        usageGranularity="weekly"
+        onUsageGranularityChange={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("Jul 27–Aug 2").closest(".chart-column")).toHaveAttribute(
+      "title",
+      "July 27, 2026–August 2, 2026\nTotal: 350\nCodex: 200\nOpenCode: 100\nAntigravity: 50"
+    );
+    expect(screen.getByText("Dec 28–Jan 3").closest(".chart-column")).toHaveAttribute(
+      "title",
+      "December 28, 2026–January 3, 2027\nTotal: 850\nCodex: 600\nOpenCode: 200\nAntigravity: 50"
+    );
+  });
 });

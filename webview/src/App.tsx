@@ -71,7 +71,7 @@ const monthYearFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "numeric"
 });
-const fullDateFormatter = new Intl.DateTimeFormat(undefined, {
+const fullDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "long",
   day: "numeric",
   year: "numeric"

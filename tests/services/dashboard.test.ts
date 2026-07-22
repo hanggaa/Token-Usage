@@ -50,6 +50,20 @@ function pointStarting(
   return snapshot.trends[granularity].find((point) => point.startDate === startDate);
 }
 
+function inTimezone<T>(timezone: string, callback: () => T): T {
+  const originalTimezone = process.env.TZ;
+  process.env.TZ = timezone;
+  try {
+    return callback();
+  } finally {
+    if (originalTimezone === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTimezone;
+    }
+  }
+}
+
 describe("buildDashboardSnapshot", () => {
   it("builds today, seven-day, and all-time exact/estimated summaries", () => {
     const snapshot = buildDashboardSnapshot(
@@ -136,6 +150,38 @@ describe("buildDashboardSnapshot", () => {
 
     expect(pointStarting(snapshot, "weekly", "2026-07-06")?.codex).toBe(30);
     expect(pointStarting(snapshot, "weekly", "2026-07-13")?.codex).toBe(40);
+  });
+
+  it("keeps daily buckets disjoint when DST advances at local midnight", () => {
+    inTimezone("America/Santiago", () => {
+      const snapshot = buildDashboardSnapshot(
+        [
+          turn("september-6", new Date(2026, 8, 6, 1, 30).toISOString(), "codex", 10, "exact"),
+          turn("september-7", new Date(2026, 8, 7, 0, 30).toISOString(), "codex", 20, "exact")
+        ],
+        [],
+        new Date(2026, 8, 7, 12)
+      );
+
+      expect(pointStarting(snapshot, "daily", "2026-09-06")?.codex).toBe(10);
+      expect(pointStarting(snapshot, "daily", "2026-09-07")?.codex).toBe(20);
+    });
+  });
+
+  it("keeps daily buckets continuous when DST moves backward", () => {
+    inTimezone("America/Santiago", () => {
+      const snapshot = buildDashboardSnapshot(
+        [
+          turn("april-4", new Date(2026, 3, 4, 23, 30).toISOString(), "codex", 10, "exact"),
+          turn("april-5", new Date(2026, 3, 5, 0, 30).toISOString(), "codex", 20, "exact")
+        ],
+        [],
+        new Date(2026, 3, 5, 12)
+      );
+
+      expect(pointStarting(snapshot, "daily", "2026-04-04")?.codex).toBe(10);
+      expect(pointStarting(snapshot, "daily", "2026-04-05")?.codex).toBe(20);
+    });
   });
 
   it("groups months across a year boundary", () => {
