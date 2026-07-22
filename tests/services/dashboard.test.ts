@@ -84,7 +84,7 @@ describe("buildDashboardSnapshot", () => {
         turn("ag", localTimestamp(2026, 6, 9, 11), "antigravity", null, "unavailable")
       ],
       [],
-      new Date("2026-07-09T12:00:00.000Z")
+      new Date(2026, 6, 9, 12)
     );
 
     for (const granularity of ["daily", "weekly", "monthly"] as const) {
