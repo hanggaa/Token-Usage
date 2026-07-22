@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { access, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import initSqlJs, { type Database } from "sql.js";
@@ -16,8 +16,9 @@ import { importResult } from "./result.js";
 export type OpenCodeExecutor = (args: string[]) => Promise<string>;
 
 const execFileAsync = promisify(execFile);
+const SESSION_INVENTORY_QUERY = "SELECT id FROM session ORDER BY time_created";
 
-async function firstExisting(candidates: string[]): Promise<string> {
+async function firstExisting(candidates: string[], fallback: string): Promise<string> {
   for (const candidate of candidates) {
     try {
       await access(candidate);
@@ -26,17 +27,46 @@ async function firstExisting(candidates: string[]): Promise<string> {
       // Continue to the next platform-specific candidate.
     }
   }
-  return process.platform === "win32" ? "opencode.exe" : "opencode";
+  return fallback;
+}
+
+export async function resolveOpenCodeBinary(
+  home: string = homedir(),
+  platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env
+): Promise<string> {
+  const binaryName = platform === "win32" ? "opencode.exe" : "opencode";
+  const nvmRoot = join(home, ".nvm", "versions", "node");
+  const nvmCandidates: string[] = [];
+  if (platform !== "win32") {
+    try {
+      const versions = await readdir(nvmRoot, { withFileTypes: true });
+      nvmCandidates.push(
+        ...versions
+          .filter((entry) => entry.isDirectory())
+          .sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true }))
+          .map((entry) => join(nvmRoot, entry.name, "bin", binaryName))
+      );
+    } catch {
+      // NVM is optional; continue with the other installation locations.
+    }
+  }
+  return firstExisting(
+    [
+      environment.OPENCODE_BIN ?? "",
+      environment.NVM_BIN ? join(environment.NVM_BIN, binaryName) : "",
+      platform === "win32" && environment.APPDATA
+        ? join(environment.APPDATA, "npm", "node_modules", "opencode-ai", "bin", binaryName)
+        : "",
+      join(home, ".opencode", "bin", binaryName),
+      ...nvmCandidates
+    ].filter(Boolean),
+    binaryName
+  );
 }
 
 export async function defaultOpenCodeExecutor(args: string[]): Promise<string> {
-  const binary = await firstExisting([
-    process.env.OPENCODE_BIN ?? "",
-    process.platform === "win32" && process.env.APPDATA
-      ? join(process.env.APPDATA, "npm", "node_modules", "opencode-ai", "bin", "opencode.exe")
-      : "",
-    join(homedir(), ".opencode", "bin", "opencode")
-  ].filter(Boolean));
+  const binary = await resolveOpenCodeBinary();
   const result = await execFileAsync(binary, args, {
     windowsHide: true,
     timeout: 30_000,
@@ -59,6 +89,24 @@ function parseJsonOutput(output: string): unknown {
     throw new Error("OpenCode did not return JSON");
   }
   return JSON.parse(clean.slice(start));
+}
+
+async function listOpenCodeSessions(execute: OpenCodeExecutor): Promise<unknown[]> {
+  try {
+    const sessions = parseJsonOutput(
+      await execute(["db", SESSION_INVENTORY_QUERY, "--format", "json"])
+    );
+    if (!Array.isArray(sessions)) {
+      throw new Error("OpenCode database session inventory was not an array");
+    }
+    return sessions;
+  } catch {
+    const sessions = parseJsonOutput(await execute(["session", "list", "--format", "json"]));
+    if (!Array.isArray(sessions)) {
+      throw new Error("OpenCode session list was not an array");
+    }
+    return sessions;
+  }
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -86,7 +134,8 @@ function queryRows(database: Database, sql: string, params: unknown[] = []): Rec
 
 async function scanDatabaseFallback(
   dataRoot: string,
-  wasmPath?: string
+  wasmPath?: string,
+  sourcePath: string = join(dataRoot, "opencode.db")
 ): Promise<{ sessions: ReturnType<typeof parseOpenCodeExport>[]; databasePath: string }> {
   const databasePath = join(dataRoot, "opencode.db");
   if (await pathExists(`${databasePath}-wal`)) {
@@ -139,13 +188,29 @@ async function scanDatabaseFallback(
             },
             messages
           },
-          databasePath
+          sourcePath
         )
       );
     }
-    return { sessions: parsed, databasePath };
+    return { sessions: parsed, databasePath: sourcePath };
   } finally {
     database.close();
+  }
+}
+
+async function scanDatabaseSnapshot(
+  dataRoot: string,
+  execute: OpenCodeExecutor,
+  wasmPath?: string
+): Promise<{ sessions: ReturnType<typeof parseOpenCodeExport>[]; databasePath: string }> {
+  const snapshotRoot = await mkdtemp(join(tmpdir(), "token-usage-opencode-"));
+  const snapshotPath = join(snapshotRoot, "opencode.db");
+  try {
+    const escapedPath = snapshotPath.replaceAll("'", "''");
+    await execute(["db", `VACUUM INTO '${escapedPath}'`]);
+    return await scanDatabaseFallback(snapshotRoot, wasmPath, join(dataRoot, "opencode.db"));
+  } finally {
+    await rm(snapshotRoot, { recursive: true, force: true });
   }
 }
 
@@ -160,11 +225,10 @@ export class OpenCodeAdapter implements SourceAdapter {
 
   async detect(): Promise<SourceAvailability> {
     try {
-      const sessions = parseJsonOutput(await this.execute(["session", "list", "--format", "json"]));
-      const count = Array.isArray(sessions) ? sessions.length : 0;
+      const sessions = await listOpenCodeSessions(this.execute);
       return {
         available: true,
-        detail: `${count} sessions reported by OpenCode`,
+        detail: `${sessions.length} sessions reported by OpenCode`,
         roots: [this.dataRoot]
       };
     } catch (error) {
@@ -177,14 +241,22 @@ export class OpenCodeAdapter implements SourceAdapter {
   }
 
   async scan(_checkpoint?: SourceCheckpoint): Promise<ImportResult> {
-    const sessions = [];
-    const turns = [];
-    const issues = [];
+    const sessions: ImportResult["sessions"] = [];
+    const turns: ImportResult["turns"] = [];
+    const issues: ImportResult["issues"] = [];
+    let snapshotMessage: string | null = null;
     try {
-      const listed = parseJsonOutput(await this.execute(["session", "list", "--format", "json"]));
-      if (!Array.isArray(listed)) {
-        throw new Error("OpenCode session list was not an array");
+      const snapshot = await scanDatabaseSnapshot(this.dataRoot, this.execute, this.wasmPath);
+      for (const parsed of snapshot.sessions) {
+        sessions.push(parsed.session);
+        turns.push(...parsed.turns);
       }
+      return importResult("opencode", sessions, turns, issues, true);
+    } catch (error) {
+      snapshotMessage = error instanceof Error ? error.message : String(error);
+    }
+    try {
+      const listed = await listOpenCodeSessions(this.execute);
       for (const row of listed) {
         const id =
           row && typeof row === "object" && typeof (row as { id?: unknown }).id === "string"
@@ -227,7 +299,7 @@ export class OpenCodeAdapter implements SourceAdapter {
         issues.push({
           sourcePath: this.dataRoot,
           severity: "error" as const,
-          message: `${cliMessage}; database fallback failed: ${
+          message: `${cliMessage}; live database snapshot failed: ${snapshotMessage}; database fallback failed: ${
             fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
           }`
         });

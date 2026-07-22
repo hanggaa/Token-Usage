@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import initSqlJs from "sql.js";
 import {
@@ -8,7 +8,10 @@ import {
   parseLegacyAntigravitySteps
 } from "../../src/adapters/antigravity-source.js";
 import { CodexAdapter } from "../../src/adapters/codex-source.js";
-import { OpenCodeAdapter } from "../../src/adapters/opencode-source.js";
+import {
+  OpenCodeAdapter,
+  resolveOpenCodeBinary
+} from "../../src/adapters/opencode-source.js";
 import { resolveSourcePaths } from "../../src/adapters/paths.js";
 
 const temporaryRoots: string[] = [];
@@ -17,6 +20,73 @@ async function temporaryRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "token-usage-test-"));
   temporaryRoots.push(root);
   return root;
+}
+
+async function writeOpenCodeDatabase(path: string): Promise<void> {
+  const SQL = await initSqlJs({
+    locateFile: (file) => resolve("node_modules/sql.js/dist", file)
+  });
+  const database = new SQL.Database();
+  database.run(
+    "CREATE TABLE session (id TEXT, directory TEXT, title TEXT, time_created INTEGER, time_updated INTEGER)"
+  );
+  database.run(
+    "CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)"
+  );
+  database.run("CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, data TEXT)");
+  database.run(
+    "INSERT INTO session VALUES (?, ?, ?, ?, ?)",
+    ["ses_db_1", "/Users/dev/db-project", "Database session", 1000, 2000]
+  );
+  database.run(
+    "INSERT INTO message VALUES (?, ?, ?, ?)",
+    [
+      "user-db",
+      "ses_db_1",
+      1000,
+      JSON.stringify({
+        role: "user",
+        time: { created: 1000 },
+        model: { providerID: "openai", modelID: "gpt-5" }
+      })
+    ]
+  );
+  database.run(
+    "INSERT INTO message VALUES (?, ?, ?, ?)",
+    [
+      "assistant-db",
+      "ses_db_1",
+      1500,
+      JSON.stringify({
+        parentID: "user-db",
+        role: "assistant",
+        providerID: "openai",
+        modelID: "gpt-5",
+        time: { created: 1500 },
+        tokens: {
+          input: 500,
+          output: 100,
+          reasoning: 20,
+          cache: { read: 300, write: 0 }
+        }
+      })
+    ]
+  );
+  database.run(
+    "INSERT INTO part VALUES (?, ?, ?, ?)",
+    ["part-user", "user-db", "ses_db_1", JSON.stringify({ type: "text", text: "Fix the query." })]
+  );
+  database.run(
+    "INSERT INTO part VALUES (?, ?, ?, ?)",
+    [
+      "part-assistant",
+      "assistant-db",
+      "ses_db_1",
+      JSON.stringify({ type: "text", text: "The query is fixed." })
+    ]
+  );
+  await writeFile(path, database.export());
+  database.close();
 }
 
 afterEach(async () => {
@@ -52,7 +122,7 @@ describe("source scanners", () => {
     expect(result.turns).toHaveLength(1);
   });
 
-  it("uses OpenCode list and export commands without a shell", async () => {
+  it("falls back to OpenCode list and export commands without a shell", async () => {
     const exportJson = await readFile(resolve("tests/fixtures/opencode-export.json"), "utf8");
     const calls: string[][] = [];
     const execute = async (args: string[]): Promise<string> => {
@@ -64,7 +134,9 @@ describe("source scanners", () => {
 
     const result = await new OpenCodeAdapter("/unused", execute).scan();
 
-    expect(calls).toEqual([
+    expect(calls[0]).toEqual(["db", expect.stringMatching(/^VACUUM INTO '/u)]);
+    expect(calls.slice(1)).toEqual([
+      ["db", "SELECT id FROM session ORDER BY time_created", "--format", "json"],
       ["session", "list", "--format", "json"],
       ["export", "ses_open_1"]
     ]);
@@ -72,72 +144,69 @@ describe("source scanners", () => {
     expect(result.turns).toHaveLength(1);
   });
 
+  it("discovers every OpenCode session through the WAL-safe database command", async () => {
+    const exportJson = await readFile(resolve("tests/fixtures/opencode-export.json"), "utf8");
+    const execute = async (args: string[]): Promise<string> => {
+      if (args[0] === "db") {
+        return JSON.stringify([{ id: "ses_open_1" }]);
+      }
+      if (args[0] === "export") {
+        return exportJson;
+      }
+      return "[]";
+    };
+
+    const result = await new OpenCodeAdapter("/unused", execute).scan();
+
+    expect(result.complete).toBe(true);
+    expect(result.sessions.map((session) => session.sourceSessionId)).toEqual(["ses_open_1"]);
+    expect(result.turns).toHaveLength(1);
+  });
+
+  it("resolves an OpenCode binary installed under NVM", async () => {
+    const root = await temporaryRoot();
+    const binary = join(root, ".nvm", "versions", "node", "v24.14.1", "bin", "opencode");
+    await mkdir(dirname(binary), { recursive: true });
+    await writeFile(binary, "test binary");
+
+    await expect(resolveOpenCodeBinary(root, "darwin", {})).resolves.toBe(binary);
+  });
+
+  it("uses a consistent OpenCode snapshot when CLI exports are truncated", async () => {
+    const execute = async (args: string[]): Promise<string> => {
+      if (args[0] === "db" && args[1] === "SELECT id FROM session ORDER BY time_created") {
+        return JSON.stringify([{ id: "ses_db_1" }]);
+      }
+      if (args[0] === "db" && args[1]?.startsWith("VACUUM INTO ")) {
+        const quotedPath = args[1].match(/^VACUUM INTO '(.*)'$/u)?.[1];
+        if (!quotedPath) {
+          throw new Error("Missing snapshot path");
+        }
+        await writeOpenCodeDatabase(quotedPath.replaceAll("''", "'"));
+        return "";
+      }
+      if (args[0] === "export") {
+        return '{"info":{"id":"ses_db_1"';
+      }
+      throw new Error(`Unexpected OpenCode command: ${args.join(" ")}`);
+    };
+
+    const result = await new OpenCodeAdapter(
+      "/unused",
+      execute,
+      resolve("node_modules/sql.js/dist/sql-wasm.wasm")
+    ).scan();
+
+    expect(result.complete).toBe(true);
+    expect(result.sessions.map((session) => session.sourceSessionId)).toEqual(["ses_db_1"]);
+    expect(result.sessions[0].sourcePath).toBe(join("/unused", "opencode.db"));
+    expect(result.turns).toHaveLength(1);
+    expect(result.issues).toEqual([]);
+  });
+
   it("falls back to a consistent OpenCode database when the CLI is unavailable", async () => {
     const root = await temporaryRoot();
-    const SQL = await initSqlJs({
-      locateFile: (file) => resolve("node_modules/sql.js/dist", file)
-    });
-    const database = new SQL.Database();
-    database.run(
-      "CREATE TABLE session (id TEXT, directory TEXT, title TEXT, time_created INTEGER, time_updated INTEGER)"
-    );
-    database.run(
-      "CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)"
-    );
-    database.run("CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, data TEXT)");
-    database.run(
-      "INSERT INTO session VALUES (?, ?, ?, ?, ?)",
-      ["ses_db_1", "/Users/dev/db-project", "Database session", 1000, 2000]
-    );
-    database.run(
-      "INSERT INTO message VALUES (?, ?, ?, ?)",
-      [
-        "user-db",
-        "ses_db_1",
-        1000,
-        JSON.stringify({
-          role: "user",
-          time: { created: 1000 },
-          model: { providerID: "openai", modelID: "gpt-5" }
-        })
-      ]
-    );
-    database.run(
-      "INSERT INTO message VALUES (?, ?, ?, ?)",
-      [
-        "assistant-db",
-        "ses_db_1",
-        1500,
-        JSON.stringify({
-          parentID: "user-db",
-          role: "assistant",
-          providerID: "openai",
-          modelID: "gpt-5",
-          time: { created: 1500 },
-          tokens: {
-            input: 500,
-            output: 100,
-            reasoning: 20,
-            cache: { read: 300, write: 0 }
-          }
-        })
-      ]
-    );
-    database.run(
-      "INSERT INTO part VALUES (?, ?, ?, ?)",
-      ["part-user", "user-db", "ses_db_1", JSON.stringify({ type: "text", text: "Fix the query." })]
-    );
-    database.run(
-      "INSERT INTO part VALUES (?, ?, ?, ?)",
-      [
-        "part-assistant",
-        "assistant-db",
-        "ses_db_1",
-        JSON.stringify({ type: "text", text: "The query is fixed." })
-      ]
-    );
-    await writeFile(join(root, "opencode.db"), database.export());
-    database.close();
+    await writeOpenCodeDatabase(join(root, "opencode.db"));
 
     const result = await new OpenCodeAdapter(root, async () => {
       throw new Error("CLI unavailable");
