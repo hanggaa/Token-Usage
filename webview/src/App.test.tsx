@@ -4,8 +4,24 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedTurn } from "../../src/domain/types.js";
-import type { DashboardSnapshot, UsageGranularity } from "../../src/shared/dashboard.js";
+import type {
+  DashboardSnapshot,
+  PeriodInsights,
+  UsageGranularity
+} from "../../src/shared/dashboard.js";
 import { App } from "./App.js";
+
+function emptyInsights(startDate: string, endDate: string): PeriodInsights {
+  return {
+    startDate,
+    endDate,
+    total: 0,
+    partial: false,
+    contributors: { sources: [], projects: [], models: [] },
+    heavyTurns: [],
+    hasComparableHistory: false
+  };
+}
 
 function fixtureTurn(
   id: string,
@@ -55,6 +71,12 @@ const snapshot: DashboardSnapshot = {
       { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
       { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
     ]
+  },
+  budgets: { daily: 0, weekly: 0, monthly: 0 },
+  insights: {
+    daily: emptyInsights("2026-07-09", "2026-07-09"),
+    weekly: emptyInsights("2026-07-13", "2026-07-19"),
+    monthly: emptyInsights("2026-08-01", "2026-08-31")
   },
   turns: [
     fixtureTurn("codex-turn", "codex", "Refactor the authentication parser", 600),

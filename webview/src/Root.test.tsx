@@ -2,8 +2,20 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardSnapshot } from "../../src/shared/dashboard.js";
+import type { DashboardSnapshot, PeriodInsights } from "../../src/shared/dashboard.js";
 import { Root, type VsCodeApi } from "./Root.js";
+
+function emptyInsights(startDate: string, endDate: string): PeriodInsights {
+  return {
+    startDate,
+    endDate,
+    total: 0,
+    partial: false,
+    contributors: { sources: [], projects: [], models: [] },
+    heavyTurns: [],
+    hasComparableHistory: false
+  };
+}
 
 const snapshot: DashboardSnapshot = {
   generatedAt: "2026-07-22T04:00:00.000Z",
@@ -22,6 +34,12 @@ const snapshot: DashboardSnapshot = {
     monthly: [
       { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, opencode: 0, antigravity: 0 }
     ]
+  },
+  budgets: { daily: 0, weekly: 0, monthly: 0 },
+  insights: {
+    daily: emptyInsights("2026-07-22", "2026-07-22"),
+    weekly: emptyInsights("2026-07-20", "2026-07-26"),
+    monthly: emptyInsights("2026-07-01", "2026-07-31")
   },
   turns: [],
   health: []

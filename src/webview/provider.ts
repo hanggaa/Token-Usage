@@ -6,8 +6,7 @@ import type {
   WebviewMessage
 } from "../shared/dashboard.js";
 import { renderWebviewHtml } from "./html.js";
-
-export type WebviewAction = "refresh" | "ready" | "deleteAll" | "rebuild";
+import { parseWebviewMessage } from "./messages.js";
 
 export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = "tokenUsage.dashboard";
@@ -18,7 +17,7 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly onAction: (action: WebviewAction) => void | Promise<void>
+    private readonly onAction: (message: WebviewMessage) => void | Promise<void>
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -77,6 +76,14 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
     this.broadcast({ type: "error", message });
   }
 
+  budgetsSaved(): void {
+    this.broadcast({ type: "budgetsSaved" });
+  }
+
+  setBudgetError(message: string): void {
+    this.broadcast({ type: "budgetError", message });
+  }
+
   private configure(webview: vscode.Webview): void {
     webview.options = {
       enableScripts: true,
@@ -94,10 +101,9 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
       styleUri: styleUri.toString(),
       nonce: randomBytes(18).toString("base64url")
     });
-    webview.onDidReceiveMessage((message: WebviewMessage) => {
-      if (["refresh", "ready", "deleteAll", "rebuild"].includes(message.type)) {
-        void this.onAction(message.type);
-      }
+    webview.onDidReceiveMessage((value: unknown) => {
+      const message = parseWebviewMessage(value);
+      if (message) void this.onAction(message);
     });
   }
 
@@ -111,4 +117,3 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
     await webview.postMessage(message);
   }
 }
-

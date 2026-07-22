@@ -141,6 +141,24 @@
           "maximum": 1440,
           "description": "Background import interval when background refresh is enabled."
         },
+        "tokenUsage.budgets.daily": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Daily token budget. Set to 0 to disable."
+        },
+        "tokenUsage.budgets.weekly": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Monday-Sunday token budget. Set to 0 to disable."
+        },
+        "tokenUsage.budgets.monthly": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Calendar-month token budget. Set to 0 to disable."
+        },
         "tokenUsage.promptRetention": {
           "type": "string",
           "enum": [

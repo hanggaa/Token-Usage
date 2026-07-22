@@ -65,6 +65,23 @@ function inTimezone<T>(timezone: string, callback: () => T): T {
 }
 
 describe("buildDashboardSnapshot", () => {
+  it("includes validated budgets and current-period insights", () => {
+    const snapshot = buildDashboardSnapshot(
+      [turn("today", localTimestamp(2026, 6, 22, 9), "codex", 250, "exact")],
+      [],
+      new Date(2026, 6, 22, 12),
+      { daily: 1_000, weekly: 5_000, monthly: 20_000 }
+    );
+
+    expect(snapshot.budgets).toEqual({ daily: 1_000, weekly: 5_000, monthly: 20_000 });
+    expect(snapshot.insights.daily).toMatchObject({
+      startDate: "2026-07-22",
+      endDate: "2026-07-22",
+      total: 250,
+      partial: false
+    });
+  });
+
   it("builds today, seven-day, and all-time exact/estimated summaries", () => {
     const snapshot = buildDashboardSnapshot(
       [

@@ -7,17 +7,16 @@ import { CodexAdapter } from "./adapters/codex-source.js";
 import { OpenCodeAdapter } from "./adapters/opencode-source.js";
 import { resolveSourcePaths } from "./adapters/paths.js";
 import type { SourceAdapter } from "./domain/types.js";
+import type { WebviewMessage } from "./shared/dashboard.js";
 import { buildDashboardSnapshot } from "./services/dashboard.js";
 import {
   ImportCoordinator,
   type PromptRetention
 } from "./services/import-coordinator.js";
 import { startRefreshScheduler } from "./services/refresh-scheduler.js";
+import { readUsageBudgets, saveUsageBudgets } from "./services/usage-budgets.js";
 import { TrackerStore } from "./storage/tracker-store.js";
-import {
-  DashboardWebviewProvider,
-  type WebviewAction
-} from "./webview/provider.js";
+import { DashboardWebviewProvider } from "./webview/provider.js";
 
 function configuredPath(
   configuration: vscode.WorkspaceConfiguration,
@@ -88,7 +87,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const publishSnapshot = async (): Promise<void> => {
     const snapshot = buildDashboardSnapshot(
       await store.getTurns(),
-      await store.getHealth()
+      await store.getHealth(),
+      new Date(),
+      readUsageBudgets(configuration)
     );
     provider.update(snapshot);
     const prefix =
@@ -134,17 +135,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return refreshPromise;
   };
 
-  const handleWebviewAction = async (action: WebviewAction): Promise<void> => {
-    if (action === "ready") {
+  const handleWebviewAction = async (message: WebviewMessage): Promise<void> => {
+    if (message.type === "ready") {
       await publishSnapshot();
-    } else if (action === "refresh") {
+    } else if (message.type === "refresh") {
       await refresh();
-    } else if (action === "rebuild") {
+    } else if (message.type === "rebuild") {
       await store.clear();
       await refresh();
-    } else if (action === "deleteAll") {
+    } else if (message.type === "deleteAll") {
       await store.clear();
       await publishSnapshot();
+    } else if (message.type === "setBudgets") {
+      try {
+        await saveUsageBudgets(message.budgets, async (key, value) => {
+          await configuration.update(key, value, vscode.ConfigurationTarget.Global);
+        });
+        await publishSnapshot();
+        provider.budgetsSaved();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        output.appendLine(`[${new Date().toISOString()}] Budget save failed: ${errorMessage}`);
+        provider.setBudgetError(errorMessage);
+      }
     }
   };
 
@@ -195,7 +208,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await publishSnapshot();
         void vscode.window.showInformationMessage("Token Usage Tracker data deleted.");
       }
-    })
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      const budgetChanged = [
+        "tokenUsage.budgets.daily",
+        "tokenUsage.budgets.weekly",
+        "tokenUsage.budgets.monthly"
+      ].some((key) => event.affectsConfiguration(key));
+      if (budgetChanged) void publishSnapshot();
+    }),
   );
 
   const backgroundRefreshEnabled = configuration.get<boolean>(

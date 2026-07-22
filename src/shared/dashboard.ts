@@ -72,18 +72,21 @@ export interface DashboardSnapshot {
     allTime: UsageSummary;
   };
   trends: Record<UsageGranularity, TrendPoint[]>;
+  budgets: UsageBudgets;
+  insights: Record<UsageGranularity, PeriodInsights>;
   turns: NormalizedTurn[];
   health: SourceHealth[];
 }
 
-export interface WebviewMessage {
-  type: "refresh" | "ready" | "deleteAll" | "rebuild";
-}
+export type WebviewMessage =
+  | { type: "refresh" | "ready" | "deleteAll" | "rebuild" }
+  | { type: "setBudgets"; budgets: UsageBudgets };
 
-export interface ExtensionMessage {
-  type: "snapshot" | "loading" | "error";
-  snapshot?: DashboardSnapshot;
-  message?: string;
-}
+export type ExtensionMessage =
+  | { type: "snapshot"; snapshot: DashboardSnapshot }
+  | { type: "loading" }
+  | { type: "error"; message: string }
+  | { type: "budgetsSaved" }
+  | { type: "budgetError"; message: string };
 
 export const SOURCES: Source[] = ["codex", "opencode", "antigravity"];

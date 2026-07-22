@@ -6,8 +6,10 @@ import type {
 import type { SourceHealth } from "../storage/tracker-store.js";
 import {
   SOURCES,
+  ZERO_USAGE_BUDGETS,
   type DashboardSnapshot,
   type TrendPoint,
+  type UsageBudgets,
   type UsageSummary
 } from "../shared/dashboard.js";
 import {
@@ -16,6 +18,7 @@ import {
   startOfLocalDay,
   type CalendarPeriod
 } from "./calendar-periods.js";
+import { buildUsageInsights } from "./usage-insights.js";
 
 interface SourceAccumulator {
   value: number;
@@ -98,7 +101,8 @@ function summarize(
 export function buildDashboardSnapshot(
   turns: NormalizedTurn[],
   health: SourceHealth[],
-  now = new Date()
+  now = new Date(),
+  budgets: UsageBudgets = ZERO_USAGE_BUDGETS
 ): DashboardSnapshot {
   const today = startOfLocalDay(now);
   const week = addLocalDays(today, -6);
@@ -116,6 +120,8 @@ export function buildDashboardSnapshot(
       allTime: summarize(turns, Number.NEGATIVE_INFINITY)
     },
     trends,
+    budgets,
+    insights: buildUsageInsights(turns, now),
     turns,
     health
   };
