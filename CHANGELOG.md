@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.4.0
+
+- Add optional Daily, Weekly, and Monthly token budgets with clear usage-status thresholds.
+- Show top source, project, and model contributors for the selected calendar period.
+- Identify unusually heavy turns using local, evidence-based historical comparisons.
+- Keep budget saves request-scoped, conflict-aware, and synchronized with VS Code global settings.
+
 ## 0.3.0
 
 - Add a single Daily, Weekly, and Monthly selector to the Usage Over Time chart.
