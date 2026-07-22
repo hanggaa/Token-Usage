@@ -10,6 +10,50 @@ export interface UsageSummary {
 
 export type UsageGranularity = "daily" | "weekly" | "monthly";
 
+export interface UsageBudgets {
+  daily: number;
+  weekly: number;
+  monthly: number;
+}
+
+export const ZERO_USAGE_BUDGETS: UsageBudgets = { daily: 0, weekly: 0, monthly: 0 };
+
+export interface RankedContributor {
+  key: string;
+  label: string;
+  fullLabel?: string;
+  tokens: number;
+  share: number;
+  partial: boolean;
+}
+
+export interface HeavyTurnInsight {
+  turnId: string;
+  prompt: string;
+  source: Source;
+  model: string;
+  project: string;
+  total: number;
+  quality: "exact" | "estimated";
+  baselineMedian: number;
+  multiplier: number;
+  baselineScope: "source-model" | "source";
+}
+
+export interface PeriodInsights {
+  startDate: string;
+  endDate: string;
+  total: number;
+  partial: boolean;
+  contributors: {
+    sources: RankedContributor[];
+    projects: RankedContributor[];
+    models: RankedContributor[];
+  };
+  heavyTurns: HeavyTurnInsight[];
+  hasComparableHistory: boolean;
+}
+
 export interface TrendPoint {
   startDate: string;
   endDate: string;

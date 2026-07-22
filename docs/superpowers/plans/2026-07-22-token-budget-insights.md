@@ -420,10 +420,10 @@ it("ranks three contributors with unknown grouping, shares, and partial flags", 
 ```ts
 it("uses source-model median first and source fallback second", () => {
   const history = [100, 100, 100, 100, 100].map((total, index) =>
-    turn(`model-${index}`, new Date(2026, 5, index + 1, 12), "codex", "gpt-5", "/work/app", total, "exact")
+    turn(`model-${index}`, new Date(2026, 5, index + 22, 12), "codex", "gpt-5", "/work/app", total, "exact")
   );
   const fallbackHistory = [200, 200, 200, 200, 200].map((total, index) =>
-    turn(`source-${index}`, new Date(2026, 5, index + 8, 12), "opencode", `model-${index}`, "/work/api", total, "exact")
+    turn(`source-${index}`, new Date(2026, 5, index + 27, 12), "opencode", `model-${index}`, "/work/api", total, "exact")
   );
   const insights = buildUsageInsights(
     [
@@ -438,8 +438,8 @@ it("uses source-model median first and source fallback second", () => {
   expect(insights.heavyTurns.map(({ turnId, baselineMedian, multiplier, baselineScope }) => ({
     turnId, baselineMedian, multiplier, baselineScope
   }))).toEqual([
-    { turnId: "same-model", baselineMedian: 100, multiplier: 2, baselineScope: "source-model" },
-    { turnId: "fallback", baselineMedian: 200, multiplier: 2, baselineScope: "source" }
+    { turnId: "fallback", baselineMedian: 200, multiplier: 2, baselineScope: "source" },
+    { turnId: "same-model", baselineMedian: 100, multiplier: 2, baselineScope: "source-model" }
   ]);
 });
 ```
@@ -449,7 +449,7 @@ Add these concrete boundary assertions using the same `turn` fixture:
 ```ts
 it("uses an inclusive 1.5x threshold and requires five eligible samples", () => {
   const five = [0, 1, 2, 3, 4].map((index) =>
-    turn(`history-${index}`, new Date(2026, 5, index + 1, 12), "codex", "gpt-5", "/app", 100, "exact")
+    turn(`history-${index}`, new Date(2026, 5, index + 22, 12), "codex", "gpt-5", "/app", 100, "exact")
   );
   const enough = buildUsageInsights([
     ...five,
@@ -467,7 +467,7 @@ it("excludes partial and unavailable comparison metrics", () => {
   const excluded = ["partial", "unavailable"] as const;
   const insights = buildUsageInsights(excluded.flatMap((quality) =>
     [0, 1, 2, 3, 4].map((index) =>
-      turn(`${quality}-${index}`, new Date(2026, 5, index + 1, 12), "codex", "gpt-5", "/app", 100, quality)
+      turn(`${quality}-${index}`, new Date(2026, 5, index + 22, 12), "codex", "gpt-5", "/app", 100, quality)
     )
   ), new Date(2026, 6, 22, 12)).daily;
   expect(insights.hasComparableHistory).toBe(false);
