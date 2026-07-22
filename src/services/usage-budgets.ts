@@ -1,6 +1,8 @@
 import type { UsageBudgets } from "../shared/dashboard.js";
 
 const MESSAGE = "Budgets must be whole, non-negative safe integers.";
+export const USAGE_BUDGET_CONFLICT_MESSAGE =
+  "Token budgets changed in Settings during save. Review the active values and try again.";
 const entries: Array<[keyof UsageBudgets, string]> = [
   ["daily", "budgets.daily"],
   ["weekly", "budgets.weekly"],
@@ -9,6 +11,19 @@ const entries: Array<[keyof UsageBudgets, string]> = [
 
 function valid(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+export class UsageBudgetConflictError extends Error {
+  constructor() {
+    super(USAGE_BUDGET_CONFLICT_MESSAGE);
+    this.name = "UsageBudgetConflictError";
+  }
+}
+
+export function usageBudgetsEqual(left: UsageBudgets, right: UsageBudgets): boolean {
+  return left.daily === right.daily
+    && left.weekly === right.weekly
+    && left.monthly === right.monthly;
 }
 
 export function validateUsageBudgets(value: unknown): UsageBudgets {
@@ -32,19 +47,37 @@ export function readUsageBudgets(configuration: {
 export async function saveUsageBudgets(
   budgets: UsageBudgets,
   previousBudgets: UsageBudgets,
+  readCurrentBudgets: () => UsageBudgets,
   update: (key: string, value: number) => Promise<void>
 ): Promise<void> {
   const validBudgets = validateUsageBudgets(budgets);
   const validPreviousBudgets = validateUsageBudgets(previousBudgets);
   const completed: Array<[keyof UsageBudgets, string]> = [];
+  const completedNames = new Set<keyof UsageBudgets>();
+
+  const assertExpectedState = () => {
+    const current = validateUsageBudgets(readCurrentBudgets());
+    for (const [name] of entries) {
+      const expected = completedNames.has(name)
+        ? validBudgets[name]
+        : validPreviousBudgets[name];
+      if (current[name] !== expected) throw new UsageBudgetConflictError();
+    }
+  };
+
   try {
     for (const [name, key] of entries) {
+      assertExpectedState();
       await update(key, validBudgets[name]);
       completed.push([name, key]);
+      completedNames.add(name);
     }
+    assertExpectedState();
   } catch (error) {
     const rollbackFailures: string[] = [];
     for (const [name, key] of completed.toReversed()) {
+      const current = validateUsageBudgets(readCurrentBudgets());
+      if (current[name] !== validBudgets[name]) continue;
       try {
         await update(key, validPreviousBudgets[name]);
       } catch (rollbackError) {

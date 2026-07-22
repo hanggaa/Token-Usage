@@ -29,10 +29,21 @@ describe("usage budgets", () => {
   });
 
   it("writes all three budget settings", async () => {
-    const update = vi.fn(async () => undefined);
+    const values = new Map([
+      ["budgets.daily", 1], ["budgets.weekly", 2], ["budgets.monthly", 3]
+    ]);
+    const read = () => ({
+      daily: values.get("budgets.daily")!,
+      weekly: values.get("budgets.weekly")!,
+      monthly: values.get("budgets.monthly")!
+    });
+    const update = vi.fn(async (key: string, value: number) => {
+      values.set(key, value);
+    });
     await saveUsageBudgets(
       { daily: 10, weekly: 20, monthly: 30 },
       { daily: 1, weekly: 2, monthly: 3 },
+      read,
       update
     );
     expect(update.mock.calls).toEqual([
@@ -45,6 +56,11 @@ describe("usage budgets", () => {
       ["budgets.daily", 1], ["budgets.weekly", 2], ["budgets.monthly", 3]
     ]);
     const updates: Array<[string, number]> = [];
+    const read = () => ({
+      daily: values.get("budgets.daily")!,
+      weekly: values.get("budgets.weekly")!,
+      monthly: values.get("budgets.monthly")!
+    });
     const update = async (key: string, value: number) => {
       updates.push([key, value]);
       if (key === "budgets.monthly" && value === 30) throw new Error("monthly rejected");
@@ -54,6 +70,7 @@ describe("usage budgets", () => {
     await expect(saveUsageBudgets(
       { daily: 10, weekly: 20, monthly: 30 },
       { daily: 1, weekly: 2, monthly: 3 },
+      read,
       update
     )).rejects.toThrow("monthly rejected");
 
@@ -72,18 +89,89 @@ describe("usage budgets", () => {
   });
 
   it("reports the original save error and every rollback failure", async () => {
+    const values = new Map([
+      ["budgets.daily", 1], ["budgets.weekly", 2], ["budgets.monthly", 3]
+    ]);
+    const read = () => ({
+      daily: values.get("budgets.daily")!,
+      weekly: values.get("budgets.weekly")!,
+      monthly: values.get("budgets.monthly")!
+    });
     const update = async (key: string, value: number) => {
-      if (key === "budgets.monthly") throw new Error("monthly rejected");
+      if (key === "budgets.monthly" && value === 30) throw new Error("monthly rejected");
       if (value === 2) throw new Error("weekly rollback rejected");
       if (value === 1) throw new Error("daily rollback rejected");
+      values.set(key, value);
     };
 
     await expect(saveUsageBudgets(
       { daily: 10, weekly: 20, monthly: 30 },
       { daily: 1, weekly: 2, monthly: 3 },
+      read,
       update
     )).rejects.toThrow(
       "monthly rejected Rollback failed for budgets.weekly: weekly rollback rejected; budgets.daily: daily rollback rejected"
     );
+  });
+
+  it("does not overwrite a not-yet-written key that diverged from the baseline", async () => {
+    const values = new Map([
+      ["budgets.daily", 1], ["budgets.weekly", 2], ["budgets.monthly", 3]
+    ]);
+    const updates: Array<[string, number]> = [];
+    const read = () => ({
+      daily: values.get("budgets.daily")!,
+      weekly: values.get("budgets.weekly")!,
+      monthly: values.get("budgets.monthly")!
+    });
+    const update = async (key: string, value: number) => {
+      updates.push([key, value]);
+      values.set(key, value);
+      if (key === "budgets.daily" && value === 10) {
+        values.set("budgets.monthly", 300);
+      }
+    };
+
+    await expect(saveUsageBudgets(
+      { daily: 10, weekly: 20, monthly: 30 },
+      { daily: 1, weekly: 2, monthly: 3 },
+      read,
+      update
+    )).rejects.toThrow("Token budgets changed in Settings during save");
+
+    expect(updates).toEqual([
+      ["budgets.daily", 10],
+      ["budgets.daily", 1]
+    ]);
+    expect(read()).toEqual({ daily: 1, weekly: 2, monthly: 300 });
+  });
+
+  it("does not roll back a completed key changed externally", async () => {
+    const values = new Map([
+      ["budgets.daily", 1], ["budgets.weekly", 2], ["budgets.monthly", 3]
+    ]);
+    const updates: Array<[string, number]> = [];
+    const read = () => ({
+      daily: values.get("budgets.daily")!,
+      weekly: values.get("budgets.weekly")!,
+      monthly: values.get("budgets.monthly")!
+    });
+    const update = async (key: string, value: number) => {
+      updates.push([key, value]);
+      values.set(key, value);
+      if (key === "budgets.daily" && value === 10) {
+        values.set("budgets.daily", 99);
+      }
+    };
+
+    await expect(saveUsageBudgets(
+      { daily: 10, weekly: 20, monthly: 30 },
+      { daily: 1, weekly: 2, monthly: 3 },
+      read,
+      update
+    )).rejects.toThrow("Token budgets changed in Settings during save");
+
+    expect(updates).toEqual([["budgets.daily", 10]]);
+    expect(read()).toEqual({ daily: 99, weekly: 2, monthly: 3 });
   });
 });

@@ -7,7 +7,12 @@ import { CodexAdapter } from "./adapters/codex-source.js";
 import { OpenCodeAdapter } from "./adapters/opencode-source.js";
 import { resolveSourcePaths } from "./adapters/paths.js";
 import type { SourceAdapter } from "./domain/types.js";
-import type { BudgetResponse, DashboardSnapshot, WebviewMessage } from "./shared/dashboard.js";
+import type {
+  BudgetResponse,
+  DashboardSnapshot,
+  UsageBudgets,
+  WebviewMessage
+} from "./shared/dashboard.js";
 import { buildDashboardSnapshot } from "./services/dashboard.js";
 import { DashboardPublicationCoordinator } from "./services/dashboard-publication.js";
 import {
@@ -85,12 +90,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let refreshPromise: Promise<void> | null = null;
   let provider: DashboardWebviewProvider;
 
-  const buildSnapshotFromStore = async (): Promise<DashboardSnapshot> =>
+  const buildSnapshotFromStore = async (budgets: UsageBudgets): Promise<DashboardSnapshot> =>
     buildDashboardSnapshot(
       await store.getTurns(),
       await store.getHealth(),
       new Date(),
-      readUsageBudgets(configuration)
+      budgets
     );
 
   const publishDashboardSnapshot = async (snapshot: DashboardSnapshot): Promise<void> => {

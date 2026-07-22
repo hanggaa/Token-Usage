@@ -132,7 +132,9 @@ function buildHeavyTurns(current: NormalizedTurn[], baseline: NormalizedTurn[]):
   return {
     hasComparableHistory,
     items: items.toSorted((left, right) =>
-      right.multiplier - left.multiplier || right.total - left.total || left.turnId.localeCompare(right.turnId)
+      right.multiplier - left.multiplier
+      || right.total - left.total
+      || compareCodePoints(left.turnId, right.turnId)
     ).slice(0, 5)
   };
 }

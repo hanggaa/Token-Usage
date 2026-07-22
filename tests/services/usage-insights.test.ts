@@ -176,6 +176,21 @@ it("uses code-point ordering for non-ASCII contributor ties", () => {
   expect(insights.contributors.models.map((item) => item.label)).toEqual(["Zulu", "Ångström"]);
 });
 
+it("uses code-point turn IDs for exact heavy-turn ties before applying the top-five limit", () => {
+  const history = Array.from({ length: 5 }, (_, index) =>
+    turn(`history-${index}`, new Date(2026, 5, index + 22, 12), "codex", "gpt-5", "/app", 100, "exact")
+  );
+  const current = ["Zulu", "Ångström", "Alpha", "Beta", "Gamma", "Omega"].map((id, index) =>
+    turn(id, new Date(2026, 6, 22, 9 + index), "codex", "gpt-5", "/app", 200, "exact")
+  );
+
+  const insights = buildUsageInsights([...history, ...current], new Date(2026, 6, 22, 20)).daily;
+
+  expect(insights.heavyTurns.map((item) => item.turnId)).toEqual([
+    "Alpha", "Beta", "Gamma", "Omega", "Zulu"
+  ]);
+});
+
 function buildLargeRankingFixture(): PeriodInsights {
   const cohorts = [
     { model: "Alpha", id: "ratio-3-total-500", baseline: 166, current: 500, target: 700 },

@@ -1,13 +1,28 @@
 import type { UsageBudgets } from "../shared/dashboard.js";
-import { saveUsageBudgets } from "./usage-budgets.js";
+import {
+  UsageBudgetConflictError,
+  saveUsageBudgets,
+  usageBudgetsEqual
+} from "./usage-budgets.js";
 
 interface DashboardPublicationDependencies<Snapshot> {
   readBudgets(): UsageBudgets;
   updateBudget(key: string, value: number): Promise<void>;
-  buildSnapshotFromStore(): Promise<Snapshot>;
+  buildSnapshotFromStore(budgets: UsageBudgets): Promise<Snapshot>;
   publishSnapshot(snapshot: Snapshot): Promise<void>;
   publishError(message: string): Promise<void>;
 }
+
+interface ActiveBudgetTransaction {
+  expected: UsageBudgets;
+  latestExternalBudgets: UsageBudgets | null;
+}
+
+const budgetNamesByKey: Record<string, keyof UsageBudgets> = {
+  "budgets.daily": "daily",
+  "budgets.weekly": "weekly",
+  "budgets.monthly": "monthly"
+};
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -16,12 +31,15 @@ function errorMessage(error: unknown): string {
 export class DashboardPublicationCoordinator<Snapshot> {
   private operationTail: Promise<void> = Promise.resolve();
   private externalBudgetPublication: Promise<void> | null = null;
-  private savingBudgets = false;
+  private activeBudgetTransaction: ActiveBudgetTransaction | null = null;
+  private lastPublishedBudgets: UsageBudgets | null = null;
 
   constructor(private readonly dependencies: DashboardPublicationDependencies<Snapshot>) {}
 
   publishSnapshot(): Promise<void> {
-    return this.enqueue(() => this.buildAndPublishSnapshot());
+    return this.enqueue(async () => {
+      await this.publishCurrentBudgetsUntilStable();
+    });
   }
 
   publishError(message: string): Promise<void> {
@@ -30,22 +48,45 @@ export class DashboardPublicationCoordinator<Snapshot> {
 
   saveBudgets(budgets: UsageBudgets): Promise<void> {
     return this.enqueue(async () => {
-      this.savingBudgets = true;
+      const previousBudgets = this.dependencies.readBudgets();
+      this.activeBudgetTransaction = {
+        expected: { ...previousBudgets },
+        latestExternalBudgets: null
+      };
       try {
         let saveError: unknown;
         try {
           await saveUsageBudgets(
             budgets,
-            this.dependencies.readBudgets(),
-            this.dependencies.updateBudget
+            previousBudgets,
+            () => this.dependencies.readBudgets(),
+            async (key, value) => {
+              const name = budgetNamesByKey[key];
+              const transaction = this.activeBudgetTransaction;
+              const previousExpected = name && transaction
+                ? transaction.expected[name]
+                : undefined;
+              if (name && transaction) transaction.expected[name] = value;
+              try {
+                await this.dependencies.updateBudget(key, value);
+              } catch (error) {
+                if (name && transaction && previousExpected !== undefined) {
+                  transaction.expected[name] = previousExpected;
+                }
+                throw error;
+              }
+            }
           );
         } catch (error) {
           saveError = error;
         }
 
         let publicationError: unknown;
+        let activeBudgets: UsageBudgets | null = null;
         try {
-          await this.buildAndPublishSnapshot();
+          activeBudgets = await this.publishCurrentBudgetsUntilStable(
+            this.activeBudgetTransaction.latestExternalBudgets ?? undefined
+          );
         } catch (error) {
           publicationError = error;
         }
@@ -58,14 +99,26 @@ export class DashboardPublicationCoordinator<Snapshot> {
         }
         if (saveError) throw saveError;
         if (publicationError) throw publicationError;
+        if (!activeBudgets || !usageBudgetsEqual(activeBudgets, budgets)) {
+          throw new UsageBudgetConflictError();
+        }
       } finally {
-        this.savingBudgets = false;
+        this.activeBudgetTransaction = null;
       }
     });
   }
 
   onBudgetConfigurationChanged(): Promise<void> {
-    if (this.savingBudgets) return Promise.resolve();
+    const current = this.dependencies.readBudgets();
+    if (this.activeBudgetTransaction) {
+      if (!usageBudgetsEqual(current, this.activeBudgetTransaction.expected)) {
+        this.activeBudgetTransaction.latestExternalBudgets = current;
+      }
+      return Promise.resolve();
+    }
+    if (this.lastPublishedBudgets && usageBudgetsEqual(current, this.lastPublishedBudgets)) {
+      return Promise.resolve();
+    }
     if (this.externalBudgetPublication) return this.externalBudgetPublication;
 
     const scheduled = Promise.resolve().then(() => this.publishSnapshot());
@@ -78,9 +131,20 @@ export class DashboardPublicationCoordinator<Snapshot> {
     return tracked;
   }
 
-  private async buildAndPublishSnapshot(): Promise<void> {
-    const snapshot = await this.dependencies.buildSnapshotFromStore();
-    await this.dependencies.publishSnapshot(snapshot);
+  private async publishCurrentBudgetsUntilStable(
+    observedBudgets?: UsageBudgets
+  ): Promise<UsageBudgets> {
+    let budgets = observedBudgets ?? this.dependencies.readBudgets();
+    const activeBeforeBuild = this.dependencies.readBudgets();
+    if (!usageBudgetsEqual(activeBeforeBuild, budgets)) budgets = activeBeforeBuild;
+    while (true) {
+      const snapshot = await this.dependencies.buildSnapshotFromStore(budgets);
+      await this.dependencies.publishSnapshot(snapshot);
+      this.lastPublishedBudgets = budgets;
+      const current = this.dependencies.readBudgets();
+      if (usageBudgetsEqual(current, budgets)) return current;
+      budgets = current;
+    }
   }
 
   private enqueue<Result>(operation: () => Promise<Result>): Promise<Result> {

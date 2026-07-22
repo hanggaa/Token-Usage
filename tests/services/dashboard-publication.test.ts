@@ -39,7 +39,7 @@ describe("DashboardPublicationCoordinator", () => {
         events.push(`update:${key}`);
         await coordinator.onBudgetConfigurationChanged();
       },
-      buildSnapshotFromStore: async () => config.readBudgets(),
+      buildSnapshotFromStore: async (budgets) => budgets,
       publishSnapshot: async (snapshot) => {
         events.push(`snapshot:${snapshot.daily}/${snapshot.weekly}/${snapshot.monthly}`);
         if (!delayedInternalEvent) {
@@ -73,7 +73,7 @@ describe("DashboardPublicationCoordinator", () => {
         if (key === "budgets.monthly" && value === 30) throw new Error("monthly rejected");
         config.values.set(key, value);
       },
-      buildSnapshotFromStore: async () => config.readBudgets(),
+      buildSnapshotFromStore: async (budgets) => budgets,
       publishSnapshot: async (snapshot) => {
         published.push(snapshot);
       },
@@ -88,7 +88,7 @@ describe("DashboardPublicationCoordinator", () => {
   it("coalesces external changes into one stored-data publication without writing settings", async () => {
     const config = configuration({ daily: 7, weekly: 8, monthly: 9 });
     const updateBudget = vi.fn(async () => undefined);
-    const buildSnapshotFromStore = vi.fn(async () => config.readBudgets());
+    const buildSnapshotFromStore = vi.fn(async (budgets: UsageBudgets) => budgets);
     const publishSnapshot = vi.fn(async () => undefined);
     const coordinator = new DashboardPublicationCoordinator({
       readBudgets: config.readBudgets,
@@ -150,6 +150,71 @@ describe("DashboardPublicationCoordinator", () => {
       "read:2",
       "snapshot:2",
       "error:newer failure"
+    ]);
+  });
+
+  it("preserves completed and uncompleted external edits during sequential writes", async () => {
+    const config = configuration();
+    const published: UsageBudgets[] = [];
+    const notifications: Array<Promise<void>> = [];
+    let coordinator!: DashboardPublicationCoordinator<UsageBudgets>;
+    coordinator = new DashboardPublicationCoordinator({
+      readBudgets: config.readBudgets,
+      updateBudget: async (key, value) => {
+        config.values.set(key, value);
+        notifications.push(coordinator.onBudgetConfigurationChanged());
+        if (key === "budgets.daily" && value === 10) {
+          config.values.set("budgets.daily", 99);
+          notifications.push(coordinator.onBudgetConfigurationChanged());
+          config.values.set("budgets.monthly", 300);
+          notifications.push(coordinator.onBudgetConfigurationChanged());
+        }
+      },
+      buildSnapshotFromStore: async (budgets) => budgets,
+      publishSnapshot: async (snapshot) => {
+        published.push(snapshot);
+      },
+      publishError: async () => undefined
+    });
+
+    await expect(coordinator.saveBudgets({ daily: 10, weekly: 20, monthly: 30 }))
+      .rejects.toThrow("Token budgets changed in Settings during save");
+    await Promise.all(notifications);
+
+    expect(config.readBudgets()).toEqual({ daily: 99, weekly: 2, monthly: 300 });
+    expect(published).toEqual([{ daily: 99, weekly: 2, monthly: 300 }]);
+  });
+
+  it("publishes the active state and rejects when settings change during the final snapshot post", async () => {
+    const config = configuration();
+    const published: UsageBudgets[] = [];
+    const notifications: Array<Promise<void>> = [];
+    let coordinator!: DashboardPublicationCoordinator<UsageBudgets>;
+    coordinator = new DashboardPublicationCoordinator({
+      readBudgets: config.readBudgets,
+      updateBudget: async (key, value) => {
+        config.values.set(key, value);
+        notifications.push(coordinator.onBudgetConfigurationChanged());
+      },
+      buildSnapshotFromStore: async (budgets) => budgets,
+      publishSnapshot: async (snapshot) => {
+        published.push(snapshot);
+        if (published.length === 1) {
+          config.values.set("budgets.weekly", 222);
+          notifications.push(coordinator.onBudgetConfigurationChanged());
+        }
+      },
+      publishError: async () => undefined
+    });
+
+    await expect(coordinator.saveBudgets({ daily: 10, weekly: 20, monthly: 30 }))
+      .rejects.toThrow("Token budgets changed in Settings during save");
+    await Promise.all(notifications);
+
+    expect(config.readBudgets()).toEqual({ daily: 10, weekly: 222, monthly: 30 });
+    expect(published).toEqual([
+      { daily: 10, weekly: 20, monthly: 30 },
+      { daily: 10, weekly: 222, monthly: 30 }
     ]);
   });
 });

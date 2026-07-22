@@ -128,11 +128,22 @@ describe("Root", () => {
       .map(([message]) => message)
       .find((message) => message.type === "setBudgets");
     if (!request || request.type !== "setBudgets") throw new Error("Expected budget request");
-    deliver({ type: "budgetError", requestId: request.requestId, message: "Could not save budgets" });
+    deliver({
+      type: "snapshot",
+      snapshot: { ...snapshot, budgets: { daily: 0, weekly: 222, monthly: 0 } }
+    });
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    deliver({
+      type: "budgetError",
+      requestId: request.requestId,
+      message: "Token budgets changed in Settings during save. Review the active values and try again."
+    });
 
     expect(screen.getByRole("heading", { name: "Token Usage" })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Could not save budgets");
+    expect(screen.getByRole("alert")).toHaveTextContent("Token budgets changed in Settings");
     expect(guardrails().getByLabelText("Daily")).toHaveValue("77");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Saving…" })).not.toBeInTheDocument();
   });
 
   it("closes the editor when budgetsSaved follows the updated snapshot", () => {
