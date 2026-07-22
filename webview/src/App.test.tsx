@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedTurn } from "../../src/domain/types.js";
 import type { DashboardSnapshot, UsageGranularity } from "../../src/shared/dashboard.js";
 import { App } from "./App.js";
@@ -80,7 +80,10 @@ const snapshot: DashboardSnapshot = {
   ]
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function renderApp(initialGranularity: UsageGranularity = "daily") {
   function Harness() {
@@ -174,5 +177,33 @@ describe("App", () => {
     expect(screen.getByTitle(/In progress/u)).toBeInTheDocument();
     expect(container.querySelector(".chart-column.in-progress .bar-track")).not.toBeNull();
     expect(container.querySelector(".bar-partial.source-antigravity")).not.toBeNull();
+  });
+
+  it("uses English axis labels when the device default locale is non-English", async () => {
+    const nativeDateTimeFormat = Intl.DateTimeFormat;
+    vi.resetModules();
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      return new nativeDateTimeFormat(locales ?? "id-ID", options);
+    } as typeof Intl.DateTimeFormat);
+
+    const { App: LocaleApp } = await import("./App.js");
+    for (const [usageGranularity, label] of [
+      ["daily", "Jul 9"],
+      ["weekly", "Jul 6–12"],
+      ["monthly", "Jul 2026"]
+    ] as const) {
+      render(
+        <LocaleApp
+          snapshot={snapshot}
+          loading={false}
+          onRefresh={() => undefined}
+          usageGranularity={usageGranularity}
+          onUsageGranularityChange={() => undefined}
+        />
+      );
+
+      expect(screen.getByText(label)).toBeInTheDocument();
+      cleanup();
+    }
   });
 });

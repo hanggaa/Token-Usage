@@ -62,12 +62,12 @@ const timeFormatter = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
   second: "2-digit"
 });
-const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
+const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric"
 });
-const monthFormatter = new Intl.DateTimeFormat(undefined, { month: "short" });
-const monthYearFormatter = new Intl.DateTimeFormat(undefined, {
+const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+const monthYearFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "numeric"
 });

@@ -78,10 +78,10 @@ describe("buildDashboardSnapshot", () => {
   it("creates daily source series without treating unavailable metrics as zero usage", () => {
     const snapshot = buildDashboardSnapshot(
       [
-        turn("codex", "2026-07-09T02:00:00.000Z", "codex", 100, "exact"),
-        turn("open", "2026-07-09T03:00:00.000Z", "opencode", 50, "exact"),
-        turn("partial", "2026-07-09T03:30:00.000Z", "antigravity", 25, "partial"),
-        turn("ag", "2026-07-09T04:00:00.000Z", "antigravity", null, "unavailable")
+        turn("codex", localTimestamp(2026, 6, 9, 9), "codex", 100, "exact"),
+        turn("open", localTimestamp(2026, 6, 9, 10), "opencode", 50, "exact"),
+        turn("partial", localTimestamp(2026, 6, 9, 10), "antigravity", 25, "partial"),
+        turn("ag", localTimestamp(2026, 6, 9, 11), "antigravity", null, "unavailable")
       ],
       [],
       new Date("2026-07-09T12:00:00.000Z")
