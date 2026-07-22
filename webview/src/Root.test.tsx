@@ -106,7 +106,11 @@ describe("Root", () => {
 
     const messages = vi.mocked(vscode.postMessage).mock.calls.map(([message]) => message);
     expect(messages.filter((message) => message.type === "setBudgets")).toEqual([
-      { type: "setBudgets", budgets: { daily: 77, weekly: 500, monthly: 2_000 } }
+      expect.objectContaining({
+        type: "setBudgets",
+        requestId: expect.any(String),
+        budgets: { daily: 77, weekly: 500, monthly: 2_000 }
+      })
     ]);
     expect(messages).not.toContainEqual({ type: "refresh" });
     expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
@@ -120,7 +124,11 @@ describe("Root", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
     fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    deliver({ type: "budgetError", message: "Could not save budgets" });
+    const request = vi.mocked(vscode.postMessage).mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === "setBudgets");
+    if (!request || request.type !== "setBudgets") throw new Error("Expected budget request");
+    deliver({ type: "budgetError", requestId: request.requestId, message: "Could not save budgets" });
 
     expect(screen.getByRole("heading", { name: "Token Usage" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Could not save budgets");
@@ -135,16 +143,58 @@ describe("Root", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
     fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const request = vi.mocked(vscode.postMessage).mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === "setBudgets");
+    if (!request || request.type !== "setBudgets") throw new Error("Expected budget request");
     deliver({
       type: "snapshot",
       snapshot: { ...snapshot, budgets: { ...snapshot.budgets, daily: 77 } }
     });
     expect(guardrails().getByLabelText("Daily")).toHaveValue("77");
 
-    deliver({ type: "budgetsSaved" });
+    deliver({ type: "budgetsSaved", requestId: request.requestId });
 
     expect(guardrails().queryByLabelText("Daily")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit budgets" })).toBeInTheDocument();
+  });
+
+  it("waits for the submitted-budget snapshot when acknowledgement arrives first", () => {
+    const vscode = fakeVsCode(null);
+    render(<Root vscode={vscode} />);
+    deliver({ type: "snapshot", snapshot });
+    fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
+    fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const request = vi.mocked(vscode.postMessage).mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === "setBudgets");
+    if (!request || request.type !== "setBudgets") throw new Error("Expected budget request");
+
+    deliver({ type: "budgetsSaved", requestId: request.requestId });
+    expect(guardrails().getByLabelText("Daily")).toHaveValue("77");
+    deliver({
+      type: "snapshot",
+      snapshot: { ...snapshot, budgets: { daily: 77, weekly: 0, monthly: 0 } }
+    });
+
+    expect(guardrails().queryByLabelText("Daily")).not.toBeInTheDocument();
+  });
+
+  it("ignores stale and unrelated budget response IDs", () => {
+    const vscode = fakeVsCode(null);
+    render(<Root vscode={vscode} />);
+    deliver({ type: "snapshot", snapshot });
+    fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
+    fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    deliver({ type: "budgetError", requestId: "another-webview-save", message: "Not ours" });
+    deliver({ type: "budgetsSaved", requestId: "stale-save" });
+
+    expect(screen.queryByText("Not ours")).not.toBeInTheDocument();
+    expect(guardrails().getByLabelText("Daily")).toHaveValue("77");
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
   });
 
   it("keeps fatal errors in the full-page error state", () => {

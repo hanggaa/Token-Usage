@@ -7,14 +7,15 @@ import { CodexAdapter } from "./adapters/codex-source.js";
 import { OpenCodeAdapter } from "./adapters/opencode-source.js";
 import { resolveSourcePaths } from "./adapters/paths.js";
 import type { SourceAdapter } from "./domain/types.js";
-import type { WebviewMessage } from "./shared/dashboard.js";
+import type { BudgetResponse, DashboardSnapshot, WebviewMessage } from "./shared/dashboard.js";
 import { buildDashboardSnapshot } from "./services/dashboard.js";
+import { DashboardPublicationCoordinator } from "./services/dashboard-publication.js";
 import {
   ImportCoordinator,
   type PromptRetention
 } from "./services/import-coordinator.js";
 import { startRefreshScheduler } from "./services/refresh-scheduler.js";
-import { readUsageBudgets, saveUsageBudgets } from "./services/usage-budgets.js";
+import { readUsageBudgets } from "./services/usage-budgets.js";
 import { TrackerStore } from "./storage/tracker-store.js";
 import { DashboardWebviewProvider } from "./webview/provider.js";
 
@@ -84,14 +85,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let refreshPromise: Promise<void> | null = null;
   let provider: DashboardWebviewProvider;
 
-  const publishSnapshot = async (): Promise<void> => {
-    const snapshot = buildDashboardSnapshot(
+  const buildSnapshotFromStore = async (): Promise<DashboardSnapshot> =>
+    buildDashboardSnapshot(
       await store.getTurns(),
       await store.getHealth(),
       new Date(),
       readUsageBudgets(configuration)
     );
-    provider.update(snapshot);
+
+  const publishDashboardSnapshot = async (snapshot: DashboardSnapshot): Promise<void> => {
+    await provider.update(snapshot);
     const prefix =
       snapshot.summaries.today.partial > 0
         ? "≥"
@@ -101,6 +104,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     status.text = `$(pulse) Tokens ${prefix}${formatStatusTokens(snapshot.summaries.today.total)}`;
     status.tooltip = `${snapshot.summaries.today.total.toLocaleString()} tracked tokens today`;
   };
+
+  const publications = new DashboardPublicationCoordinator({
+    readBudgets: () => readUsageBudgets(configuration),
+    updateBudget: async (key, value) => {
+      await configuration.update(key, value, vscode.ConfigurationTarget.Global);
+    },
+    buildSnapshotFromStore,
+    publishSnapshot: publishDashboardSnapshot,
+    publishError: async (message) => provider.setError(message)
+  });
+
+  const publishSnapshot = (): Promise<void> => publications.publishSnapshot();
 
   const refresh = (): Promise<void> => {
     if (refreshPromise) {
@@ -125,7 +140,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         output.appendLine(`[${new Date().toISOString()}] Import failed: ${message}`);
-        provider.setError(message);
+        await publications.publishError(message);
         status.text = "$(error) Tokens";
         status.tooltip = message;
       } finally {
@@ -135,7 +150,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return refreshPromise;
   };
 
-  const handleWebviewAction = async (message: WebviewMessage): Promise<void> => {
+  const handleWebviewAction = async (
+    message: WebviewMessage,
+    respond: (message: BudgetResponse) => Promise<void>
+  ): Promise<void> => {
     if (message.type === "ready") {
       await publishSnapshot();
     } else if (message.type === "refresh") {
@@ -148,15 +166,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await publishSnapshot();
     } else if (message.type === "setBudgets") {
       try {
-        await saveUsageBudgets(message.budgets, async (key, value) => {
-          await configuration.update(key, value, vscode.ConfigurationTarget.Global);
-        });
-        await publishSnapshot();
-        provider.budgetsSaved();
+        await publications.saveBudgets(message.budgets);
+        await respond({ type: "budgetsSaved", requestId: message.requestId });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         output.appendLine(`[${new Date().toISOString()}] Budget save failed: ${errorMessage}`);
-        provider.setBudgetError(errorMessage);
+        await respond({
+          type: "budgetError", requestId: message.requestId, message: errorMessage
+        });
       }
     }
   };
@@ -215,7 +232,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         "tokenUsage.budgets.weekly",
         "tokenUsage.budgets.monthly"
       ].some((key) => event.affectsConfiguration(key));
-      if (budgetChanged) void publishSnapshot();
+      if (budgetChanged) void publications.onBudgetConfigurationChanged();
     }),
   );
 

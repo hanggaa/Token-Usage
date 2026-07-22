@@ -30,9 +30,60 @@ describe("usage budgets", () => {
 
   it("writes all three budget settings", async () => {
     const update = vi.fn(async () => undefined);
-    await saveUsageBudgets({ daily: 10, weekly: 20, monthly: 30 }, update);
+    await saveUsageBudgets(
+      { daily: 10, weekly: 20, monthly: 30 },
+      { daily: 1, weekly: 2, monthly: 3 },
+      update
+    );
     expect(update.mock.calls).toEqual([
       ["budgets.daily", 10], ["budgets.weekly", 20], ["budgets.monthly", 30]
     ]);
+  });
+
+  it("rolls back every completed write after a mid-save failure", async () => {
+    const values = new Map([
+      ["budgets.daily", 1], ["budgets.weekly", 2], ["budgets.monthly", 3]
+    ]);
+    const updates: Array<[string, number]> = [];
+    const update = async (key: string, value: number) => {
+      updates.push([key, value]);
+      if (key === "budgets.monthly" && value === 30) throw new Error("monthly rejected");
+      values.set(key, value);
+    };
+
+    await expect(saveUsageBudgets(
+      { daily: 10, weekly: 20, monthly: 30 },
+      { daily: 1, weekly: 2, monthly: 3 },
+      update
+    )).rejects.toThrow("monthly rejected");
+
+    expect(updates).toEqual([
+      ["budgets.daily", 10],
+      ["budgets.weekly", 20],
+      ["budgets.monthly", 30],
+      ["budgets.weekly", 2],
+      ["budgets.daily", 1]
+    ]);
+    expect(Object.fromEntries(values)).toEqual({
+      "budgets.daily": 1,
+      "budgets.weekly": 2,
+      "budgets.monthly": 3
+    });
+  });
+
+  it("reports the original save error and every rollback failure", async () => {
+    const update = async (key: string, value: number) => {
+      if (key === "budgets.monthly") throw new Error("monthly rejected");
+      if (value === 2) throw new Error("weekly rollback rejected");
+      if (value === 1) throw new Error("daily rollback rejected");
+    };
+
+    await expect(saveUsageBudgets(
+      { daily: 10, weekly: 20, monthly: 30 },
+      { daily: 1, weekly: 2, monthly: 3 },
+      update
+    )).rejects.toThrow(
+      "monthly rejected Rollback failed for budgets.weekly: weekly rollback rejected; budgets.daily: daily rollback rejected"
+    );
   });
 });

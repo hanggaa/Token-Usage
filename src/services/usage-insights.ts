@@ -47,6 +47,10 @@ interface ContributorIdentity {
   fullLabel?: string;
 }
 
+function compareCodePoints(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function rankContributors(
   turns: NormalizedTurn[],
   periodTotal: number,
@@ -68,8 +72,8 @@ function rankContributors(
     .map((item) => ({ ...item, share: periodTotal > 0 ? item.tokens / periodTotal : 0 }))
     .toSorted((left, right) =>
       right.tokens - left.tokens
-      || left.label.localeCompare(right.label)
-      || left.key.localeCompare(right.key)
+      || compareCodePoints(left.label, right.label)
+      || compareCodePoints(left.key, right.key)
     )
     .slice(0, 3);
 }

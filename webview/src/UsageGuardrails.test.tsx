@@ -73,7 +73,11 @@ it("shows lower-bound budget usage, contributor paths, and heavy turn evidence",
   renderGuardrails({ partial: true });
   expect(screen.getByText(/≥800/u)).toBeInTheDocument();
   expect(screen.getByText("Partial data")).toBeInTheDocument();
-  expect(screen.getByLabelText("app: /work/app")).toHaveAttribute("title", "/work/app");
+  const projects = screen.getByRole("heading", { name: "Projects" }).closest("div")!;
+  const contributor = within(projects).getByText("app");
+  expect(contributor).toHaveAccessibleName("app");
+  expect(contributor).toHaveAccessibleDescription("/work/app");
+  expect(contributor).toHaveAttribute("title", "/work/app");
   expect(screen.getByText("2.3× your recent median")).toBeInTheDocument();
   expect(screen.getByText("Same source and model")).toBeInTheDocument();
 });
@@ -88,16 +92,16 @@ it("shows a heavy-turn project basename while retaining its full path metadata",
 
   const project = screen.getByText("token-usage");
   expect(project).toHaveAttribute("title", fullPath);
-  expect(project).toHaveAccessibleName(`Project: ${fullPath}`);
+  expect(project).toHaveAccessibleName("token-usage");
   expect(project).toHaveAccessibleDescription(fullPath);
-  expect(screen.queryByText(fullPath)).not.toBeInTheDocument();
+  expect(screen.getByText(fullPath)).toHaveClass("sr-only");
 });
 
 it.each([
-  ["C:\\Users\\demo\\work\\token-usage", "token-usage"],
-  ["", "Unknown"],
-  [undefined, "Unknown"]
-])("labels heavy-turn project %s as %s", (project, label) => {
+  ["C:\\Users\\demo\\work\\token-usage", "token-usage", "C:\\Users\\demo\\work\\token-usage"],
+  ["", "Unknown", ""],
+  [undefined, "Unknown", ""]
+])("labels heavy-turn project %s as %s", (project, label, description) => {
   renderGuardrails({
     insights: {
       heavyTurns: [{
@@ -107,7 +111,58 @@ it.each([
     }
   });
 
-  expect(screen.getByText(label)).toBeInTheDocument();
+  const element = screen.getByText(label);
+  expect(element).toHaveAccessibleName(label);
+  if (description) expect(element).toHaveAccessibleDescription(description);
+  else expect(element).not.toHaveAttribute("aria-describedby");
+});
+
+it("uses unique descriptions while preserving contributor and heavy-turn basenames", () => {
+  const fullPath = "/Users/demo/work/token-usage";
+  renderGuardrails({
+    insights: {
+      contributors: {
+        ...baseInsights.contributors,
+        projects: [
+          { key: "first", label: "token-usage", fullLabel: fullPath, tokens: 500, share: 0.625, partial: false },
+          { key: "second", label: "api", fullLabel: "/Users/demo/work/api", tokens: 300, share: 0.375, partial: false }
+        ]
+      },
+      heavyTurns: [{ ...baseInsights.heavyTurns[0], project: fullPath }]
+    }
+  });
+
+  const described = screen.getAllByText("token-usage");
+  const descriptionIds = described.map((element) => element.getAttribute("aria-describedby"));
+  expect(descriptionIds.every(Boolean)).toBe(true);
+  expect(new Set(descriptionIds).size).toBe(descriptionIds.length);
+  for (const element of described) {
+    expect(element).toHaveAccessibleName("token-usage");
+    expect(element).toHaveAccessibleDescription(fullPath);
+  }
+});
+
+it("preserves Windows and Unknown contributor accessible names", () => {
+  const windowsPath = "C:\\Users\\demo\\work\\token-usage";
+  renderGuardrails({
+    insights: {
+      contributors: {
+        ...baseInsights.contributors,
+        projects: [
+          { key: "windows", label: "token-usage", fullLabel: windowsPath, tokens: 500, share: 0.625, partial: false },
+          { key: "unknown", label: "Unknown", tokens: 300, share: 0.375, partial: false }
+        ]
+      },
+      heavyTurns: []
+    }
+  });
+
+  const windowsProject = screen.getByText("token-usage");
+  expect(windowsProject).toHaveAccessibleName("token-usage");
+  expect(windowsProject).toHaveAccessibleDescription(windowsPath);
+  const unknownProject = screen.getByText("Unknown");
+  expect(unknownProject).toHaveAccessibleName("Unknown");
+  expect(unknownProject).not.toHaveAttribute("aria-describedby");
 });
 
 it("keeps contributors visible when the budget is disabled", () => {

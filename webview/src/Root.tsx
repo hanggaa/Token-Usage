@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   DashboardSnapshot,
   ExtensionMessage,
@@ -16,12 +16,27 @@ export interface VsCodeApi {
   setState(state: { usageGranularity: UsageGranularity }): void;
 }
 
+interface PendingBudgetSave {
+  requestId: string;
+  budgets: UsageBudgets;
+  acknowledged: boolean;
+  matchingSnapshot: boolean;
+}
+
+function budgetsMatch(left: UsageBudgets, right: UsageBudgets): boolean {
+  return left.daily === right.daily
+    && left.weekly === right.weekly
+    && left.monthly === right.monthly;
+}
+
 export function Root({ vscode }: { vscode: VsCodeApi | null }) {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [budgetSaveState, setBudgetSaveState] = useState<BudgetSaveState>("idle");
   const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
+  const pendingBudgetSave = useRef<PendingBudgetSave | null>(null);
+  const budgetRequestSequence = useRef(0);
   const [usageGranularity, setUsageGranularity] = useState<UsageGranularity>(() =>
     readUsageGranularity(vscode?.getState())
   );
@@ -32,15 +47,33 @@ export function Root({ vscode }: { vscode: VsCodeApi | null }) {
         setSnapshot(event.data.snapshot);
         setLoading(false);
         setError(null);
+        const pending = pendingBudgetSave.current;
+        if (pending && budgetsMatch(event.data.snapshot.budgets, pending.budgets)) {
+          pending.matchingSnapshot = true;
+          if (pending.acknowledged) {
+            pendingBudgetSave.current = null;
+            setBudgetSaveState("saved");
+            setBudgetSaveError(null);
+          }
+        }
       } else if (event.data.type === "loading") {
         setLoading(true);
       } else if (event.data.type === "error") {
         setLoading(false);
         setError(event.data.message ?? "Unable to load token usage.");
       } else if (event.data.type === "budgetsSaved") {
-        setBudgetSaveState("saved");
-        setBudgetSaveError(null);
+        const pending = pendingBudgetSave.current;
+        if (!pending || event.data.requestId !== pending.requestId) return;
+        pending.acknowledged = true;
+        if (pending.matchingSnapshot) {
+          pendingBudgetSave.current = null;
+          setBudgetSaveState("saved");
+          setBudgetSaveError(null);
+        }
       } else if (event.data.type === "budgetError") {
+        const pending = pendingBudgetSave.current;
+        if (!pending || event.data.requestId !== pending.requestId) return;
+        pendingBudgetSave.current = null;
         setBudgetSaveState("error");
         setBudgetSaveError(event.data.message);
       }
@@ -58,9 +91,16 @@ export function Root({ vscode }: { vscode: VsCodeApi | null }) {
   };
 
   const saveBudgets = (budgets: UsageBudgets) => {
+    const requestId = `budget-save-${Date.now()}-${++budgetRequestSequence.current}`;
+    pendingBudgetSave.current = {
+      requestId,
+      budgets,
+      acknowledged: false,
+      matchingSnapshot: false
+    };
     setBudgetSaveState("saving");
     setBudgetSaveError(null);
-    vscode?.postMessage({ type: "setBudgets", budgets });
+    vscode?.postMessage({ type: "setBudgets", requestId, budgets });
   };
 
   const settleBudgetSave = () => setBudgetSaveState("idle");

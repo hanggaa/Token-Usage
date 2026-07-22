@@ -80,13 +80,18 @@ export interface DashboardSnapshot {
 
 export type WebviewMessage =
   | { type: "refresh" | "ready" | "deleteAll" | "rebuild" }
-  | { type: "setBudgets"; budgets: UsageBudgets };
+  | { type: "setBudgets"; requestId: string; budgets: UsageBudgets };
 
 export type ExtensionMessage =
   | { type: "snapshot"; snapshot: DashboardSnapshot }
   | { type: "loading" }
   | { type: "error"; message: string }
-  | { type: "budgetsSaved" }
-  | { type: "budgetError"; message: string };
+  | { type: "budgetsSaved"; requestId: string }
+  | { type: "budgetError"; requestId: string; message: string };
+
+export type BudgetResponse = Extract<
+  ExtensionMessage,
+  { type: "budgetsSaved" | "budgetError" }
+>;
 
 export const SOURCES: Source[] = ["codex", "opencode", "antigravity"];

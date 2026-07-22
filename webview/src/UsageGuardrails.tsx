@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type {
   PeriodInsights,
   RankedContributor,
@@ -51,6 +51,21 @@ function projectPathLabel(project: string | null | undefined): string {
   return project.split(/[\\/]/u).filter(Boolean).at(-1) ?? "Unknown";
 }
 
+function AccessiblePath({ label, fullPath }: { label: string; fullPath?: string }) {
+  const descriptionId = useId();
+  const description = fullPath?.trim();
+  return (
+    <>
+      <span
+        aria-label={label}
+        title={description || undefined}
+        aria-describedby={description ? descriptionId : undefined}
+      >{label}</span>
+      {description && <span id={descriptionId} className="sr-only">{description}</span>}
+    </>
+  );
+}
+
 function ContributorGroup({ title, items }: { title: string; items: RankedContributor[] }) {
   return (
     <div className="contributor-group">
@@ -58,10 +73,7 @@ function ContributorGroup({ title, items }: { title: string; items: RankedContri
       {items.length === 0 ? <p className="empty-copy">No usage in this period</p> : (
         <ol>{items.map((item) => (
           <li key={item.key}>
-            <span
-              title={item.fullLabel}
-              aria-label={item.fullLabel ? `${item.label}: ${item.fullLabel}` : undefined}
-            >{item.label}</span>
+            <AccessiblePath label={item.label} fullPath={item.fullLabel} />
             <span>
               {item.partial ? "≥" : ""}{numberFormatter.format(item.tokens)}
               {" · "}{(item.share * 100).toFixed(1)}%
@@ -208,12 +220,10 @@ export function UsageGuardrails({
                 <strong>{turn.prompt.trim() || "Prompt unavailable"}</strong>
                 <span>
                   {sourceLabels[turn.source]} · {turn.model} ·{" "}
-                  <span
-                    title={projectPath || undefined}
-                    aria-label={projectPath ? `Project: ${projectPath}` : "Project: Unknown"}
-                  >
-                    {projectPathLabel(turn.project)}
-                  </span>
+                  <AccessiblePath
+                    label={projectPathLabel(turn.project)}
+                    fullPath={projectPath || undefined}
+                  />
                 </span>
                 <span className={turn.quality === "estimated" ? "estimated" : undefined}>
                   {numberFormatter.format(turn.total)} tokens

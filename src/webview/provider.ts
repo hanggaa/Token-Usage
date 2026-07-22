@@ -2,11 +2,12 @@ import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import type {
   DashboardSnapshot,
+  BudgetResponse,
   ExtensionMessage,
   WebviewMessage
 } from "../shared/dashboard.js";
 import { renderWebviewHtml } from "./html.js";
-import { parseWebviewMessage } from "./messages.js";
+import { createWebviewMessageReceiver } from "./messages.js";
 
 export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = "tokenUsage.dashboard";
@@ -17,7 +18,10 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly onAction: (message: WebviewMessage) => void | Promise<void>
+    private readonly onAction: (
+      message: WebviewMessage,
+      respond: (message: BudgetResponse) => Promise<void>
+    ) => void | Promise<void>
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -63,25 +67,17 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  update(snapshot: DashboardSnapshot): void {
+  async update(snapshot: DashboardSnapshot): Promise<void> {
     this.latestSnapshot = snapshot;
-    this.broadcast({ type: "snapshot", snapshot });
+    await this.broadcast({ type: "snapshot", snapshot });
   }
 
   setLoading(): void {
-    this.broadcast({ type: "loading" });
+    void this.broadcast({ type: "loading" });
   }
 
-  setError(message: string): void {
-    this.broadcast({ type: "error", message });
-  }
-
-  budgetsSaved(): void {
-    this.broadcast({ type: "budgetsSaved" });
-  }
-
-  setBudgetError(message: string): void {
-    this.broadcast({ type: "budgetError", message });
+  async setError(message: string): Promise<void> {
+    await this.broadcast({ type: "error", message });
   }
 
   private configure(webview: vscode.Webview): void {
@@ -101,16 +97,15 @@ export class DashboardWebviewProvider implements vscode.WebviewViewProvider {
       styleUri: styleUri.toString(),
       nonce: randomBytes(18).toString("base64url")
     });
+    const respond = async (message: BudgetResponse) => this.post(webview, message);
+    const receive = createWebviewMessageReceiver(this.onAction, respond);
     webview.onDidReceiveMessage((value: unknown) => {
-      const message = parseWebviewMessage(value);
-      if (message) void this.onAction(message);
+      void receive(value);
     });
   }
 
-  private broadcast(message: ExtensionMessage): void {
-    for (const webview of this.webviews) {
-      void this.post(webview, message);
-    }
+  private async broadcast(message: ExtensionMessage): Promise<void> {
+    await Promise.all([...this.webviews].map((webview) => this.post(webview, message)));
   }
 
   private async post(webview: vscode.Webview, message: ExtensionMessage): Promise<void> {

@@ -72,7 +72,7 @@ const snapshot: DashboardSnapshot = {
       { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
     ]
   },
-  budgets: { daily: 100, weekly: 1_000, monthly: 10_000 },
+  budgets: { daily: 100, weekly: 250, monthly: 2_000 },
   insights: {
     daily: { ...emptyInsights("2026-07-09", "2026-07-09"), total: 10 },
     weekly: { ...emptyInsights("2026-07-13", "2026-07-19"), total: 200 },
@@ -189,6 +189,8 @@ describe("App", () => {
     const guardrails = screen.getByRole("heading", { name: "Usage Guardrails" }).closest("section")!;
     expect(within(guardrails).getByText("Daily period ending 2026-07-09")).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Used").parentElement!).getByText("10")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Limit").parentElement!).getByText("100")).toBeInTheDocument();
+    expect(within(guardrails).getByText("On track")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Weekly" }));
     expect(screen.getByRole("radio", { name: "Weekly" })).toBeChecked();
@@ -196,12 +198,16 @@ describe("App", () => {
     expect(screen.getByText("Jul 6–12")).toBeInTheDocument();
     expect(within(guardrails).getByText("Weekly period ending 2026-07-19")).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Used").parentElement!).getByText("200")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Limit").parentElement!).getByText("250")).toBeInTheDocument();
+    expect(within(guardrails).getByText("Approaching limit")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Monthly" }));
     expect(screen.getByRole("img", { name: "Monthly token usage by source" })).toBeInTheDocument();
     expect(screen.getByText("Jul 2026")).toBeInTheDocument();
     expect(within(guardrails).getByText("Monthly period ending 2026-08-31")).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Used").parentElement!).getByText(/3[.,]000/u)).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Limit").parentElement!).getByText(/2[.,]000/u)).toBeInTheDocument();
+    expect(within(guardrails).getByText("Budget exceeded")).toBeInTheDocument();
   });
 
   it("marks the current bucket in progress and retains partial-source styling", () => {

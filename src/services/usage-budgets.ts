@@ -31,8 +31,33 @@ export function readUsageBudgets(configuration: {
 
 export async function saveUsageBudgets(
   budgets: UsageBudgets,
+  previousBudgets: UsageBudgets,
   update: (key: string, value: number) => Promise<void>
 ): Promise<void> {
   const validBudgets = validateUsageBudgets(budgets);
-  for (const [name, key] of entries) await update(key, validBudgets[name]);
+  const validPreviousBudgets = validateUsageBudgets(previousBudgets);
+  const completed: Array<[keyof UsageBudgets, string]> = [];
+  try {
+    for (const [name, key] of entries) {
+      await update(key, validBudgets[name]);
+      completed.push([name, key]);
+    }
+  } catch (error) {
+    const rollbackFailures: string[] = [];
+    for (const [name, key] of completed.toReversed()) {
+      try {
+        await update(key, validPreviousBudgets[name]);
+      } catch (rollbackError) {
+        const message = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        rollbackFailures.push(`${key}: ${message}`);
+      }
+    }
+    if (rollbackFailures.length > 0) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} Rollback failed for ${rollbackFailures.join("; ")}`, {
+        cause: error
+      });
+    }
+    throw error;
+  }
 }

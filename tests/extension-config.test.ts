@@ -41,7 +41,7 @@ describe("extension background-import defaults", () => {
     }
   });
 
-  it("republishes budget changes without importing source history", async () => {
+  it("wires budget saves and configuration changes through the publication coordinator", async () => {
     const source = await readFile("src/extension.ts", "utf8");
     const branchStart = source.indexOf('message.type === "setBudgets"');
     const branchEnd = source.indexOf("provider = new DashboardWebviewProvider", branchStart);
@@ -51,11 +51,12 @@ describe("extension background-import defaults", () => {
     const listener = source.slice(listenerStart, listenerEnd);
 
     expect(branchStart).toBeGreaterThan(-1);
-    expect(budgetBranch).toContain("saveUsageBudgets");
-    expect(budgetBranch).toContain("provider.budgetsSaved()");
-    expect(budgetBranch).toContain("provider.setBudgetError(errorMessage)");
+    expect(source).toContain("new DashboardPublicationCoordinator");
+    expect(budgetBranch).toContain("publications.saveBudgets(message.budgets)");
+    expect(budgetBranch).toContain('respond({ type: "budgetsSaved", requestId: message.requestId })');
+    expect(budgetBranch).toContain('type: "budgetError", requestId: message.requestId, message: errorMessage');
     expect(budgetBranch).not.toContain("coordinator.refresh");
-    expect(listener).toContain("publishSnapshot()");
+    expect(listener).toContain("publications.onBudgetConfigurationChanged()");
     expect(listener).not.toContain("refresh()");
   });
 });

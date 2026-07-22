@@ -70,6 +70,29 @@ it("excludes numeric unavailable totals from period totals and contributors", ()
   ]);
 });
 
+it("uses basenames for Windows projects and Unknown for missing projects", () => {
+  const insights = buildUsageInsights([
+    turn(
+      "windows",
+      new Date(2026, 6, 22, 9),
+      "codex",
+      "gpt-5",
+      "C:\\Users\\demo\\work\\token-usage",
+      100,
+      "exact"
+    ),
+    turn("unknown", new Date(2026, 6, 22, 10), "codex", "gpt-5", null, 50, "exact")
+  ], new Date(2026, 6, 22, 12)).daily;
+
+  expect(insights.contributors.projects).toEqual([
+    expect.objectContaining({
+      label: "token-usage",
+      fullLabel: "C:\\Users\\demo\\work\\token-usage"
+    }),
+    expect.objectContaining({ label: "Unknown", fullLabel: undefined })
+  ]);
+});
+
 it("uses source-model median first and source fallback second", () => {
   const history = [100, 100, 100, 100, 100].map((total, index) =>
     turn(`model-${index}`, new Date(2026, 5, index + 22, 12), "codex", "gpt-5", "/work/app", total, "exact")
@@ -142,6 +165,15 @@ it("limits and deterministically orders contributors and heavy turns", () => {
   expect(insights.heavyTurns.map((item) => item.turnId)).toEqual([
     "ratio-3-total-500", "ratio-3-total-400", "ratio-2-a", "ratio-2-b", "ratio-15"
   ]);
+});
+
+it("uses code-point ordering for non-ASCII contributor ties", () => {
+  const insights = buildUsageInsights([
+    turn("zulu", new Date(2026, 6, 22, 9), "codex", "Zulu", "/work/app", 100, "exact"),
+    turn("accented", new Date(2026, 6, 22, 10), "codex", "Ångström", "/work/app", 100, "exact")
+  ], new Date(2026, 6, 22, 12)).daily;
+
+  expect(insights.contributors.models.map((item) => item.label)).toEqual(["Zulu", "Ångström"]);
 });
 
 function buildLargeRankingFixture(): PeriodInsights {
