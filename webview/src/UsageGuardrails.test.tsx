@@ -73,9 +73,41 @@ it("shows lower-bound budget usage, contributor paths, and heavy turn evidence",
   renderGuardrails({ partial: true });
   expect(screen.getByText(/≥800/u)).toBeInTheDocument();
   expect(screen.getByText("Partial data")).toBeInTheDocument();
-  expect(screen.getByText("app")).toHaveAttribute("title", "/work/app");
+  expect(screen.getByLabelText("app: /work/app")).toHaveAttribute("title", "/work/app");
   expect(screen.getByText("2.3× your recent median")).toBeInTheDocument();
   expect(screen.getByText("Same source and model")).toBeInTheDocument();
+});
+
+it("shows a heavy-turn project basename while retaining its full path metadata", () => {
+  const fullPath = "/Users/demo/work/token-usage";
+  renderGuardrails({
+    insights: {
+      heavyTurns: [{ ...baseInsights.heavyTurns[0], project: fullPath }]
+    }
+  });
+
+  const project = screen.getByText("token-usage");
+  expect(project).toHaveAttribute("title", fullPath);
+  expect(project).toHaveAccessibleName(`Project: ${fullPath}`);
+  expect(project).toHaveAccessibleDescription(fullPath);
+  expect(screen.queryByText(fullPath)).not.toBeInTheDocument();
+});
+
+it.each([
+  ["C:\\Users\\demo\\work\\token-usage", "token-usage"],
+  ["", "Unknown"],
+  [undefined, "Unknown"]
+])("labels heavy-turn project %s as %s", (project, label) => {
+  renderGuardrails({
+    insights: {
+      heavyTurns: [{
+        ...baseInsights.heavyTurns[0],
+        project: project as string
+      }]
+    }
+  });
+
+  expect(screen.getByText(label)).toBeInTheDocument();
 });
 
 it("keeps contributors visible when the budget is disabled", () => {

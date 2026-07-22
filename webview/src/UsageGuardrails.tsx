@@ -46,6 +46,11 @@ function parseBudget(value: string): number | null {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function projectPathLabel(project: string | null | undefined): string {
+  if (!project?.trim()) return "Unknown";
+  return project.split(/[\\/]/u).filter(Boolean).at(-1) ?? "Unknown";
+}
+
 function ContributorGroup({ title, items }: { title: string; items: RankedContributor[] }) {
   return (
     <div className="contributor-group">
@@ -196,18 +201,29 @@ export function UsageGuardrails({
               : "Not enough history yet"}
           </p>
         ) : (
-          <ol className="heavy-turn-list">{insights.heavyTurns.map((turn) => (
-            <li key={turn.turnId}>
-              <strong>{turn.prompt.trim() || "Prompt unavailable"}</strong>
-              <span>{sourceLabels[turn.source]} · {turn.model} · {turn.project}</span>
-              <span className={turn.quality === "estimated" ? "estimated" : undefined}>
-                {numberFormatter.format(turn.total)} tokens
-                {turn.quality === "estimated" ? " (estimated)" : ""}
-                {" · "}<span>{turn.multiplier.toFixed(1)}× your recent median</span>
-              </span>
-              <small>{turn.baselineScope === "source-model" ? "Same source and model" : "Same source"}</small>
-            </li>
-          ))}</ol>
+          <ol className="heavy-turn-list">{insights.heavyTurns.map((turn) => {
+            const projectPath = turn.project?.trim();
+            return (
+              <li key={turn.turnId}>
+                <strong>{turn.prompt.trim() || "Prompt unavailable"}</strong>
+                <span>
+                  {sourceLabels[turn.source]} · {turn.model} ·{" "}
+                  <span
+                    title={projectPath || undefined}
+                    aria-label={projectPath ? `Project: ${projectPath}` : "Project: Unknown"}
+                  >
+                    {projectPathLabel(turn.project)}
+                  </span>
+                </span>
+                <span className={turn.quality === "estimated" ? "estimated" : undefined}>
+                  {numberFormatter.format(turn.total)} tokens
+                  {turn.quality === "estimated" ? " (estimated)" : ""}
+                  {" · "}<span>{turn.multiplier.toFixed(1)}× your recent median</span>
+                </span>
+                <small>{turn.baselineScope === "source-model" ? "Same source and model" : "Same source"}</small>
+              </li>
+            );
+          })}</ol>
         )}
       </div>
     </section>
