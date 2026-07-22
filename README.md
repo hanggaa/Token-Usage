@@ -6,12 +6,13 @@ Token Usage Tracker is a private, local-first VS Code-compatible extension for u
 - OpenCode CLI
 - Antigravity IDE
 
-It imports persisted local histories into a local SQLite index, then presents summaries, calendar trends, budgets, contributors, unusually heavy turns, import health, and per-turn details in one dashboard. Usage data is not transmitted anywhere.
+It imports persisted local histories into a local SQLite index, then presents summaries, calendar trends, budgets, contributors, unusually heavy turns, import health, and per-turn details in one dashboard. Usage data never leaves your machine.
 
 ## Dashboard
 
 - Review **Today**, **Last 7 Days**, and **All Time** token summaries.
 - Switch one Usage Over Time chart between **Daily**, **Weekly**, and **Monthly** calendar periods.
+- Daily, Weekly, and Monthly calendar periods use your local time.
 - Include the current calendar period, visually marked **In progress**.
 - Set optional Daily, Monday-Sunday Weekly, and calendar-month token budgets.
 - See the top source, project, and model contributors for the selected period.
@@ -33,7 +34,7 @@ Budgets and insights are informational. They do not interrupt, throttle, or bloc
 ## Privacy
 
 - All indexed data stays in `~/.token-usage-tracker/usage.sqlite` by default.
-- No telemetry, cloud synchronization, or outbound network requests.
+- No telemetry, cloud synchronization, or external network requests.
 - Source histories are read-only.
 - Authentication files are never read.
 - Budgets and insights are calculated locally.
