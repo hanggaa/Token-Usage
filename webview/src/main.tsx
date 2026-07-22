@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type {
   DashboardSnapshot,
   ExtensionMessage,
+  UsageGranularity,
   WebviewMessage
 } from "../../src/shared/dashboard.js";
 import { App } from "./App.js";
@@ -20,6 +21,7 @@ function Root() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usageGranularity, setUsageGranularity] = useState<UsageGranularity>("daily");
 
   useEffect(() => {
     const receive = (event: MessageEvent<ExtensionMessage>) => {
@@ -65,6 +67,8 @@ function Root() {
       snapshot={snapshot}
       loading={loading}
       onRefresh={() => vscode?.postMessage({ type: "refresh" })}
+      usageGranularity={usageGranularity}
+      onUsageGranularityChange={setUsageGranularity}
     />
   );
 }
@@ -74,4 +78,3 @@ createRoot(document.getElementById("root")!).render(
     <Root />
   </StrictMode>
 );
-

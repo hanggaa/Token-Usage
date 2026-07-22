@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { NormalizedTurn } from "../../src/domain/types.js";
-import type { DashboardSnapshot } from "../../src/shared/dashboard.js";
+import type { DashboardSnapshot, UsageGranularity } from "../../src/shared/dashboard.js";
 import { App } from "./App.js";
 
 function fixtureTurn(
@@ -41,10 +42,20 @@ const snapshot: DashboardSnapshot = {
     sevenDays: { total: 5_250, exact: 4_000, estimated: 1_000, partial: 250 },
     allTime: { total: 21_000, exact: 16_000, estimated: 4_000, partial: 1_000 }
   },
-  trend: [
-    { date: "2026-07-08", codex: 200, opencode: 100, antigravity: null },
-    { date: "2026-07-09", codex: 600, opencode: 200, antigravity: 50 }
-  ],
+  trends: {
+    daily: [
+      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, opencode: 100, antigravity: null },
+      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, opencode: 200, antigravity: 50, partialSources: ["antigravity"] }
+    ],
+    weekly: [
+      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
+      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
+    ],
+    monthly: [
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
+      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
+    ]
+  },
   turns: [
     fixtureTurn("codex-turn", "codex", "Refactor the authentication parser", 600),
     fixtureTurn("open-turn", "opencode", "Write the database migration", 400)
@@ -71,21 +82,38 @@ const snapshot: DashboardSnapshot = {
 
 afterEach(cleanup);
 
+function renderApp(initialGranularity: UsageGranularity = "daily") {
+  function Harness() {
+    const [usageGranularity, setUsageGranularity] = useState(initialGranularity);
+    return (
+      <App
+        snapshot={snapshot}
+        loading={false}
+        onRefresh={() => undefined}
+        usageGranularity={usageGranularity}
+        onUsageGranularityChange={setUsageGranularity}
+      />
+    );
+  }
+
+  return render(<Harness />);
+}
+
 describe("App", () => {
   it("renders the accepted overview, trend, health, and turn-table structure", () => {
-    render(<App snapshot={snapshot} loading={false} onRefresh={() => undefined} />);
+    renderApp();
 
     expect(screen.getByRole("heading", { name: "Token Usage" })).toBeInTheDocument();
     const todayCard = screen.getByText("Today").closest("section");
     expect(within(todayCard!).getByText(/≥1[.,]050/u)).toBeInTheDocument();
     expect(within(todayCard!).getByText(/Lower bound:/u)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Daily usage" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Usage Over Time" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Import Health" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Token usage by turn" })).toBeInTheDocument();
   });
 
   it("filters rows by prompt search and source", () => {
-    render(<App snapshot={snapshot} loading={false} onRefresh={() => undefined} />);
+    renderApp();
 
     fireEvent.change(screen.getByPlaceholderText("Search prompts"), {
       target: { value: "migration" }
@@ -101,7 +129,7 @@ describe("App", () => {
   });
 
   it("opens full prompt and visible response details for the selected row", () => {
-    render(<App snapshot={snapshot} loading={false} onRefresh={() => undefined} />);
+    renderApp();
 
     const table = screen.getByRole("table", { name: "Token usage by turn" });
     fireEvent.click(within(table).getByText("Write the database migration"));
@@ -113,7 +141,7 @@ describe("App", () => {
   });
 
   it("closes the detail panel and reopens it when another row is selected", () => {
-    render(<App snapshot={snapshot} loading={false} onRefresh={() => undefined} />);
+    renderApp();
 
     fireEvent.click(screen.getByRole("button", { name: "Close turn details" }));
     expect(screen.queryByRole("complementary", { name: "Turn details" })).not.toBeInTheDocument();
@@ -121,5 +149,30 @@ describe("App", () => {
     const table = screen.getByRole("table", { name: "Token usage by turn" });
     fireEvent.click(within(table).getByText("Write the database migration"));
     expect(screen.getByRole("complementary", { name: "Turn details" })).toBeInTheDocument();
+  });
+
+  it("defaults to Daily and switches to the precomputed weekly and monthly series", () => {
+    renderApp();
+
+    expect(screen.getByRole("radio", { name: "Daily" })).toBeChecked();
+    expect(screen.getByRole("img", { name: "Daily token usage by source" })).toBeInTheDocument();
+    expect(screen.getByText("Jul 9")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Weekly" }));
+    expect(screen.getByRole("radio", { name: "Weekly" })).toBeChecked();
+    expect(screen.getByRole("img", { name: "Weekly token usage by source" })).toBeInTheDocument();
+    expect(screen.getByText("Jul 6–12")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Monthly" }));
+    expect(screen.getByRole("img", { name: "Monthly token usage by source" })).toBeInTheDocument();
+    expect(screen.getByText("Jul 2026")).toBeInTheDocument();
+  });
+
+  it("marks the current bucket in progress and retains partial-source styling", () => {
+    const { container } = renderApp("weekly");
+
+    expect(screen.getByTitle(/In progress/u)).toBeInTheDocument();
+    expect(container.querySelector(".chart-column.in-progress .bar-track")).not.toBeNull();
+    expect(container.querySelector(".bar-partial.source-antigravity")).not.toBeNull();
   });
 });

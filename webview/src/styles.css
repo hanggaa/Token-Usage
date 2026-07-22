@@ -197,6 +197,53 @@ tr:focus-visible {
   font-weight: 650;
 }
 
+.trend-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.aggregation-selector {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--vscode-button-border, #44484a);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.aggregation-selector label {
+  position: relative;
+  cursor: pointer;
+}
+
+.aggregation-selector input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.aggregation-selector span {
+  display: block;
+  padding: 4px 8px;
+  color: var(--vscode-descriptionForeground, #b1b3b4);
+  font-size: 10px;
+}
+
+.aggregation-selector label + label span {
+  border-left: 1px solid var(--vscode-button-border, #44484a);
+}
+
+.aggregation-selector input:checked + span {
+  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-button-background, #0e639c);
+}
+
+.aggregation-selector input:focus-visible + span {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -2px;
+}
+
 .legend {
   display: flex;
   align-items: center;
@@ -237,7 +284,7 @@ tr:focus-visible {
 .chart {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(14, minmax(16px, 1fr));
+  grid-template-columns: repeat(var(--bucket-count), minmax(16px, 1fr));
   align-items: end;
   gap: 8px;
   height: 158px;
@@ -290,6 +337,11 @@ tr:focus-visible {
   width: min(32px, 72%);
   height: 122px;
   margin: 0 auto;
+}
+
+.chart-column.in-progress .bar-track {
+  outline: 1px dashed var(--vscode-descriptionForeground, #9c9fa1);
+  outline-offset: 2px;
 }
 
 .bar-segment {
@@ -750,6 +802,11 @@ tbody tr.selected {
 
   .legend {
     gap: 8px;
+  }
+
+  .panel-heading,
+  .trend-controls {
+    flex-wrap: wrap;
   }
 
   .chart {

@@ -33,6 +33,23 @@ function turn(
   };
 }
 
+function localTimestamp(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hour = 12
+): string {
+  return new Date(year, monthIndex, day, hour).toISOString();
+}
+
+function pointStarting(
+  snapshot: ReturnType<typeof buildDashboardSnapshot>,
+  granularity: "daily" | "weekly" | "monthly",
+  startDate: string
+) {
+  return snapshot.trends[granularity].find((point) => point.startDate === startDate);
+}
+
 describe("buildDashboardSnapshot", () => {
   it("builds today, seven-day, and all-time exact/estimated summaries", () => {
     const snapshot = buildDashboardSnapshot(
@@ -70,12 +87,68 @@ describe("buildDashboardSnapshot", () => {
       new Date("2026-07-09T12:00:00.000Z")
     );
 
-    expect(snapshot.trend.at(-1)).toEqual({
-      date: "2026-07-09",
+    for (const granularity of ["daily", "weekly", "monthly"] as const) {
+      expect(snapshot.trends[granularity].at(-1)).toMatchObject({
       codex: 100,
       opencode: 50,
       antigravity: 25,
       partialSources: ["antigravity"]
+      });
+    }
+  });
+
+  it("builds 14 daily, 12 Monday-based weekly, and 12 monthly buckets", () => {
+    const snapshot = buildDashboardSnapshot([], [], new Date(2026, 6, 22, 12));
+
+    expect(snapshot.trends.daily).toHaveLength(14);
+    expect(snapshot.trends.weekly).toHaveLength(12);
+    expect(snapshot.trends.monthly).toHaveLength(12);
+    expect(snapshot.trends.daily.at(-1)).toMatchObject({
+      startDate: "2026-07-22",
+      endDate: "2026-07-22",
+      inProgress: true
     });
+    expect(snapshot.trends.weekly.at(-1)).toMatchObject({
+      startDate: "2026-07-20",
+      endDate: "2026-07-26",
+      inProgress: true
+    });
+    expect(snapshot.trends.monthly.at(-1)).toMatchObject({
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+      inProgress: true
+    });
+    expect(snapshot.trends.daily.at(-2)?.inProgress).toBe(false);
+    expect(snapshot.trends.weekly.at(-2)?.inProgress).toBe(false);
+    expect(snapshot.trends.monthly.at(-2)?.inProgress).toBe(false);
+  });
+
+  it("keeps Monday through Sunday together and starts a new bucket on Monday", () => {
+    const snapshot = buildDashboardSnapshot(
+      [
+        turn("monday", localTimestamp(2026, 6, 6), "codex", 10, "exact"),
+        turn("sunday", localTimestamp(2026, 6, 12), "codex", 20, "exact"),
+        turn("next-monday", localTimestamp(2026, 6, 13), "codex", 40, "exact")
+      ],
+      [],
+      new Date(2026, 6, 15, 12)
+    );
+
+    expect(pointStarting(snapshot, "weekly", "2026-07-06")?.codex).toBe(30);
+    expect(pointStarting(snapshot, "weekly", "2026-07-13")?.codex).toBe(40);
+  });
+
+  it("groups months across a year boundary", () => {
+    const snapshot = buildDashboardSnapshot(
+      [
+        turn("december", localTimestamp(2026, 11, 31), "opencode", 25, "exact"),
+        turn("january", localTimestamp(2027, 0, 1), "opencode", 50, "exact")
+      ],
+      [],
+      new Date(2027, 0, 15, 12)
+    );
+
+    expect(pointStarting(snapshot, "monthly", "2026-12-01")?.opencode).toBe(25);
+    expect(pointStarting(snapshot, "monthly", "2027-01-01")?.opencode).toBe(50);
   });
 });

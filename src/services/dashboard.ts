@@ -28,8 +28,88 @@ function dateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+interface CalendarBucket {
+  start: Date;
+  nextStart: Date;
+}
+
+interface SourceAccumulator {
+  value: number;
+  seen: boolean;
+  qualities: Set<MeasurementQuality>;
+}
+
+function startOfWeek(date: Date): Date {
+  const day = startOfDay(date);
+  const daysSinceMonday = (day.getDay() + 6) % 7;
+  return addDays(day, -daysSinceMonday);
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, amount: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function makeBuckets(
+  currentStart: Date,
+  count: number,
+  advance: (date: Date, amount: number) => Date
+): CalendarBucket[] {
+  return Array.from({ length: count }, (_, index) => {
+    const offset = index - (count - 1);
+    const start = advance(currentStart, offset);
+    return { start, nextStart: advance(start, 1) };
+  });
+}
+
+function emptySources(): Record<Source, SourceAccumulator> {
+  return {
+    codex: { value: 0, seen: false, qualities: new Set() },
+    opencode: { value: 0, seen: false, qualities: new Set() },
+    antigravity: { value: 0, seen: false, qualities: new Set() }
+  };
+}
+
 function totalMetric(turn: NormalizedTurn) {
   return turn.metrics.find((metric) => metric.kind === "total");
+}
+
+function buildTrend(turns: NormalizedTurn[], buckets: CalendarBucket[]): TrendPoint[] {
+  const values = buckets.map(() => emptySources());
+
+  for (const turn of turns) {
+    const timestamp = new Date(turn.timestamp).valueOf();
+    const bucketIndex = buckets.findIndex(
+      ({ start, nextStart }) => timestamp >= start.valueOf() && timestamp < nextStart.valueOf()
+    );
+    const metric = totalMetric(turn);
+    if (bucketIndex < 0 || metric?.value == null) {
+      continue;
+    }
+
+    const source = values[bucketIndex][turn.source];
+    source.value += metric.value;
+    source.seen = true;
+    source.qualities.add(metric.quality);
+  }
+
+  return buckets.map(({ start, nextStart }, index) => {
+    const sourceValues = values[index];
+    return {
+      startDate: dateKey(start),
+      endDate: dateKey(addDays(nextStart, -1)),
+      inProgress: index === buckets.length - 1,
+      codex: sourceValues.codex.seen ? sourceValues.codex.value : null,
+      opencode: sourceValues.opencode.seen ? sourceValues.opencode.value : null,
+      antigravity: sourceValues.antigravity.seen ? sourceValues.antigravity.value : null,
+      partialSources: SOURCES.filter((source) =>
+        sourceValues[source].qualities.has("partial")
+      )
+    };
+  });
 }
 
 function summarize(
@@ -64,45 +144,13 @@ export function buildDashboardSnapshot(
 ): DashboardSnapshot {
   const today = startOfDay(now);
   const week = addDays(today, -6);
-  const trendStart = addDays(today, -13);
-  const trendMap = new Map<
-    string,
-    Record<Source, { value: number; seen: boolean; qualities: Set<MeasurementQuality> }>
-  >();
-
-  for (let offset = 0; offset < 14; offset += 1) {
-    const key = dateKey(addDays(trendStart, offset));
-    trendMap.set(key, {
-      codex: { value: 0, seen: false, qualities: new Set() },
-      opencode: { value: 0, seen: false, qualities: new Set() },
-      antigravity: { value: 0, seen: false, qualities: new Set() }
-    });
-  }
-
-  for (const turn of turns) {
-    const key = dateKey(new Date(turn.timestamp));
-    const point = trendMap.get(key);
-    const metric = totalMetric(turn);
-    if (!point || metric?.value == null) {
-      continue;
-    }
-    point[turn.source].value += metric.value;
-    point[turn.source].seen = true;
-    point[turn.source].qualities.add(metric.quality);
-  }
-
-  const trend: TrendPoint[] = [...trendMap].map(([date, values]) => ({
-    date,
-    ...Object.fromEntries(
-      SOURCES.map((source) => [
-        source,
-        values[source].seen ? values[source].value : null
-      ])
-    ),
-    partialSources: SOURCES.filter((source) =>
-      values[source].qualities.has("partial")
-    )
-  })) as TrendPoint[];
+  const trends = {
+    daily: buildTrend(turns, makeBuckets(today, 14, addDays)),
+    weekly: buildTrend(turns, makeBuckets(startOfWeek(today), 12, (date, amount) =>
+      addDays(date, amount * 7)
+    )),
+    monthly: buildTrend(turns, makeBuckets(startOfMonth(today), 12, addMonths))
+  };
 
   return {
     generatedAt: now.toISOString(),
@@ -111,7 +159,7 @@ export function buildDashboardSnapshot(
       sevenDays: summarize(turns, week.valueOf()),
       allTime: summarize(turns, Number.NEGATIVE_INFINITY)
     },
-    trend,
+    trends,
     turns,
     health
   };

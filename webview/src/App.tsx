@@ -10,6 +10,7 @@ import {
   useMemo,
   useState
 } from "react";
+import type { CSSProperties } from "react";
 import type {
   MeasurementQuality,
   NormalizedTurn,
@@ -20,6 +21,8 @@ import type {
 import {
   SOURCES,
   type DashboardSnapshot,
+  type TrendPoint,
+  type UsageGranularity,
   type UsageSummary
 } from "../../src/shared/dashboard.js";
 import "./styles.css";
@@ -28,12 +31,20 @@ interface AppProps {
   snapshot: DashboardSnapshot;
   loading: boolean;
   onRefresh: () => void;
+  usageGranularity: UsageGranularity;
+  onUsageGranularityChange: (granularity: UsageGranularity) => void;
 }
 
 const SOURCE_LABELS: Record<Source, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   antigravity: "Antigravity"
+};
+
+const GRANULARITY_LABELS: Record<UsageGranularity, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly"
 };
 
 const METRIC_LABELS: Record<TokenKind, string> = {
@@ -55,10 +66,62 @@ const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric"
 });
+const monthFormatter = new Intl.DateTimeFormat(undefined, { month: "short" });
+const monthYearFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  year: "numeric"
+});
+const fullDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  day: "numeric",
+  year: "numeric"
+});
 const compactNumberFormatter = new Intl.NumberFormat(undefined, {
   notation: "compact",
   maximumFractionDigits: 1
 });
+
+function parseCalendarDate(value: string): Date {
+  return new Date(`${value}T12:00:00`);
+}
+
+function formatAxisLabel(granularity: UsageGranularity, point: TrendPoint): string {
+  const start = parseCalendarDate(point.startDate);
+  const end = parseCalendarDate(point.endDate);
+  if (granularity === "daily") {
+    return shortDateFormatter.format(start);
+  }
+  if (granularity === "monthly") {
+    return monthYearFormatter.format(start);
+  }
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+    return `${monthFormatter.format(start)} ${start.getDate()}–${end.getDate()}`;
+  }
+  return `${shortDateFormatter.format(start)}–${shortDateFormatter.format(end)}`;
+}
+
+function formatFullPeriod(point: TrendPoint): string {
+  const start = parseCalendarDate(point.startDate);
+  const end = parseCalendarDate(point.endDate);
+  if (point.startDate === point.endDate) {
+    return fullDateFormatter.format(start);
+  }
+  return `${fullDateFormatter.format(start)}–${fullDateFormatter.format(end)}`;
+}
+
+function formatTooltip(point: TrendPoint): string {
+  const total = SOURCES.reduce((sum, source) => sum + (point[source] ?? 0), 0);
+  return [
+    formatFullPeriod(point),
+    `Total: ${numberFormatter.format(total)}`,
+    ...SOURCES.map((source) =>
+      `${SOURCE_LABELS[source]}: ${
+        point[source] == null ? "Unavailable" : numberFormatter.format(point[source])
+      }`
+    ),
+    ...(point.inProgress ? ["In progress"] : [])
+  ].join("\n");
+}
 
 function formatMetric(metric?: TokenMetric): string {
   if (!metric || metric.value == null) {
@@ -116,27 +179,70 @@ function SummaryCard({
   );
 }
 
-function TrendChart({ snapshot }: { snapshot: DashboardSnapshot }) {
+function AggregationSelector({
+  value,
+  onChange
+}: {
+  value: UsageGranularity;
+  onChange: (granularity: UsageGranularity) => void;
+}) {
+  return (
+    <fieldset className="aggregation-selector" aria-label="Usage aggregation">
+      <legend className="sr-only">Usage aggregation</legend>
+      {(Object.keys(GRANULARITY_LABELS) as UsageGranularity[]).map((granularity) => (
+        <label key={granularity}>
+          <input
+            type="radio"
+            name="usage-aggregation"
+            value={granularity}
+            checked={value === granularity}
+            onChange={() => onChange(granularity)}
+          />
+          <span>{GRANULARITY_LABELS[granularity]}</span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+function TrendChart({
+  snapshot,
+  usageGranularity,
+  onUsageGranularityChange
+}: {
+  snapshot: DashboardSnapshot;
+  usageGranularity: UsageGranularity;
+  onUsageGranularityChange: (granularity: UsageGranularity) => void;
+}) {
+  const points = snapshot.trends[usageGranularity];
   const maximum = Math.max(
     1,
-    ...snapshot.trend.map((point) =>
+    ...points.map((point) =>
       SOURCES.reduce((sum, source) => sum + (point[source] ?? 0), 0)
     )
   );
   return (
     <section className="panel trend-panel">
       <header className="panel-heading">
-        <h2>Daily usage</h2>
-        <div className="legend" aria-label="Chart legend">
-          {SOURCES.map((source) => (
-            <span key={source}>
-              <i className={`source-dot source-${source}`} />
-              {SOURCE_LABELS[source]}
-            </span>
-          ))}
+        <h2>Usage Over Time</h2>
+        <div className="trend-controls">
+          <AggregationSelector value={usageGranularity} onChange={onUsageGranularityChange} />
+          <div className="legend" aria-label="Chart legend">
+            {SOURCES.map((source) => (
+              <span key={source}>
+                <i className={`source-dot source-${source}`} />
+                {SOURCE_LABELS[source]}
+              </span>
+            ))}
+          </div>
         </div>
       </header>
-      <div className="chart" role="img" aria-label="Daily token usage by source">
+      <div
+        className="chart"
+        role="img"
+        aria-label={`${GRANULARITY_LABELS[usageGranularity]} token usage by source`}
+        style={{ "--bucket-count": points.length } as CSSProperties}
+      >
         <div className="y-axis" aria-hidden="true">
           {[1, 0.75, 0.5, 0.25].map((fraction) => (
             <span key={fraction}>{compactNumberFormatter.format(Math.round(maximum * fraction))}</span>
@@ -148,10 +254,13 @@ function TrendChart({ snapshot }: { snapshot: DashboardSnapshot }) {
           <span />
           <span />
         </div>
-        {snapshot.trend.map((point) => {
-          const total = SOURCES.reduce((sum, source) => sum + (point[source] ?? 0), 0);
+        {points.map((point) => {
           return (
-            <div className="chart-column" key={point.date} title={`${point.date}: ${numberFormatter.format(total)}`}>
+            <div
+              className={`chart-column ${point.inProgress ? "in-progress" : ""}`}
+              key={`${usageGranularity}:${point.startDate}`}
+              title={formatTooltip(point)}
+            >
               <div className="bar-track">
                 {SOURCES.map((source) => {
                   const value = point[source] ?? 0;
@@ -166,7 +275,7 @@ function TrendChart({ snapshot }: { snapshot: DashboardSnapshot }) {
                   );
                 })}
               </div>
-              <span>{shortDateFormatter.format(new Date(`${point.date}T12:00:00`))}</span>
+              <span>{formatAxisLabel(usageGranularity, point)}</span>
             </div>
           );
         })}
@@ -324,7 +433,13 @@ function SelectFilter({
   );
 }
 
-export function App({ snapshot, loading, onRefresh }: AppProps) {
+export function App({
+  snapshot,
+  loading,
+  onRefresh,
+  usageGranularity,
+  onUsageGranularityChange
+}: AppProps) {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [source, setSource] = useState("all");
@@ -389,7 +504,11 @@ export function App({ snapshot, loading, onRefresh }: AppProps) {
       </section>
 
       <section className="analytics-grid">
-        <TrendChart snapshot={snapshot} />
+        <TrendChart
+          snapshot={snapshot}
+          usageGranularity={usageGranularity}
+          onUsageGranularityChange={onUsageGranularityChange}
+        />
         <ImportHealth snapshot={snapshot} />
       </section>
 

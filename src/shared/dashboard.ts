@@ -8,8 +8,12 @@ export interface UsageSummary {
   partial: number;
 }
 
+export type UsageGranularity = "daily" | "weekly" | "monthly";
+
 export interface TrendPoint {
-  date: string;
+  startDate: string;
+  endDate: string;
+  inProgress: boolean;
   codex: number | null;
   opencode: number | null;
   antigravity: number | null;
@@ -23,7 +27,7 @@ export interface DashboardSnapshot {
     sevenDays: UsageSummary;
     allTime: UsageSummary;
   };
-  trend: TrendPoint[];
+  trends: Record<UsageGranularity, TrendPoint[]>;
   turns: NormalizedTurn[];
   health: SourceHealth[];
 }
