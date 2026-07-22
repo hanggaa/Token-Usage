@@ -5,7 +5,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "tests/**/*.test.ts",
-      "webview/src/**/*.test.tsx"
+      "webview/src/**/*.test.{ts,tsx}"
     ],
     setupFiles: [
       "./webview/src/test/setup.ts"
@@ -23,4 +23,3 @@ export default defineConfig({
     }
   }
 });
-
