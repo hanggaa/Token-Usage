@@ -97,13 +97,51 @@ const snapshot = {
     sevenDays: { total: 12_842_196, exact: 9_275_104, estimated: 2_567_092, partial: 1_000_000 },
     allTime: { total: 98_421_583, exact: 71_232_991, estimated: 22_188_592, partial: 5_000_000 }
   },
-  trend: Array.from({ length: 14 }, (_, index) => ({
-    date: `2026-07-${String(index + 1).padStart(2, "0")}`,
-    codex: 650_000 + (index % 5) * 70_000,
-    opencode: 420_000 + (index % 4) * 80_000,
-    antigravity: 250_000 + (index % 3) * 60_000,
-    partialSources: ["antigravity"]
-  })),
+  trends: {
+    daily: Array.from({ length: 14 }, (_, index) => {
+      const day = String(index + 26).padStart(2, "0");
+      const date = index < 5 ? `2026-06-${day}` : `2026-07-${String(index - 4).padStart(2, "0")}`;
+      return {
+        startDate: date,
+        endDate: date,
+        inProgress: index === 13,
+        codex: 650_000 + (index % 5) * 70_000,
+        opencode: 420_000 + (index % 4) * 80_000,
+        antigravity: 250_000 + (index % 3) * 60_000,
+        partialSources: ["antigravity"]
+      };
+    }),
+    weekly: Array.from({ length: 12 }, (_, index) => {
+      const start = new Date(2026, 3, 20 + index * 7);
+      const end = new Date(2026, 3, 26 + index * 7);
+      const formatDate = (date) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      return {
+        startDate: formatDate(start),
+        endDate: formatDate(end),
+        inProgress: index === 11,
+        codex: 3_750_000 + (index % 5) * 420_000,
+        opencode: 2_450_000 + (index % 4) * 480_000,
+        antigravity: 1_500_000 + (index % 3) * 360_000,
+        partialSources: ["antigravity"]
+      };
+    }),
+    monthly: Array.from({ length: 12 }, (_, index) => {
+      const start = new Date(2025, 7 + index, 1);
+      const end = new Date(2025, 8 + index, 0);
+      const formatDate = (date) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      return {
+        startDate: formatDate(start),
+        endDate: formatDate(end),
+        inProgress: index === 11,
+        codex: 15_600_000 + (index % 5) * 1_700_000,
+        opencode: 10_080_000 + (index % 4) * 1_920_000,
+        antigravity: 6_000_000 + (index % 3) * 1_440_000,
+        partialSources: ["antigravity"]
+      };
+    })
+  },
   turns,
   health: [
     { source: "codex", complete: true, completedAt: new Date().toISOString(), sessionCount: 12, turnCount: 64, issues: [] },
@@ -143,6 +181,9 @@ try {
     "Add rate limiting to the upload endpoint",
     { exact: true }
   ).waitFor();
+  await page.getByText("Weekly", { exact: true }).click();
+  await page.getByRole("radio", { name: "Weekly" }).check();
+  await page.getByRole("img", { name: "Weekly token usage by source" }).waitFor();
   await page.screenshot({ path: screenshotPath, fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
