@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import type {
   DashboardSnapshot,
   ExtensionMessage,
+  UsageBudgets,
   UsageGranularity,
   WebviewMessage
 } from "../../src/shared/dashboard.js";
 import { App } from "./App.js";
+import type { BudgetSaveState } from "./UsageGuardrails.js";
 import { readUsageGranularity, writeUsageGranularity } from "./usage-state.js";
 
 export interface VsCodeApi {
@@ -18,6 +20,8 @@ export function Root({ vscode }: { vscode: VsCodeApi | null }) {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [budgetSaveState, setBudgetSaveState] = useState<BudgetSaveState>("idle");
+  const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
   const [usageGranularity, setUsageGranularity] = useState<UsageGranularity>(() =>
     readUsageGranularity(vscode?.getState())
   );
@@ -33,6 +37,12 @@ export function Root({ vscode }: { vscode: VsCodeApi | null }) {
       } else if (event.data.type === "error") {
         setLoading(false);
         setError(event.data.message ?? "Unable to load token usage.");
+      } else if (event.data.type === "budgetsSaved") {
+        setBudgetSaveState("saved");
+        setBudgetSaveError(null);
+      } else if (event.data.type === "budgetError") {
+        setBudgetSaveState("error");
+        setBudgetSaveError(event.data.message);
       }
     };
     window.addEventListener("message", receive);
@@ -46,6 +56,14 @@ export function Root({ vscode }: { vscode: VsCodeApi | null }) {
       writeUsageGranularity(vscode, next);
     }
   };
+
+  const saveBudgets = (budgets: UsageBudgets) => {
+    setBudgetSaveState("saving");
+    setBudgetSaveError(null);
+    vscode?.postMessage({ type: "setBudgets", budgets });
+  };
+
+  const settleBudgetSave = () => setBudgetSaveState("idle");
 
   if (error) {
     return (
@@ -75,6 +93,10 @@ export function Root({ vscode }: { vscode: VsCodeApi | null }) {
       onRefresh={() => vscode?.postMessage({ type: "refresh" })}
       usageGranularity={usageGranularity}
       onUsageGranularityChange={changeUsageGranularity}
+      budgetSaveState={budgetSaveState}
+      budgetSaveError={budgetSaveError}
+      onSaveBudgets={saveBudgets}
+      onBudgetSaveSettled={settleBudgetSave}
     />
   );
 }

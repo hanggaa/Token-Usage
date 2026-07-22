@@ -22,9 +22,11 @@ import {
   SOURCES,
   type DashboardSnapshot,
   type TrendPoint,
+  type UsageBudgets,
   type UsageGranularity,
   type UsageSummary
 } from "../../src/shared/dashboard.js";
+import { UsageGuardrails, type BudgetSaveState } from "./UsageGuardrails.js";
 import "./styles.css";
 
 interface AppProps {
@@ -33,6 +35,10 @@ interface AppProps {
   onRefresh: () => void;
   usageGranularity: UsageGranularity;
   onUsageGranularityChange: (granularity: UsageGranularity) => void;
+  budgetSaveState: BudgetSaveState;
+  budgetSaveError: string | null;
+  onSaveBudgets: (budgets: UsageBudgets) => void;
+  onBudgetSaveSettled: () => void;
 }
 
 const SOURCE_LABELS: Record<Source, string> = {
@@ -438,7 +444,11 @@ export function App({
   loading,
   onRefresh,
   usageGranularity,
-  onUsageGranularityChange
+  onUsageGranularityChange,
+  budgetSaveState,
+  budgetSaveError,
+  onSaveBudgets,
+  onBudgetSaveSettled
 }: AppProps) {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -511,6 +521,16 @@ export function App({
         />
         <ImportHealth snapshot={snapshot} />
       </section>
+
+      <UsageGuardrails
+        granularity={usageGranularity}
+        budgets={snapshot.budgets}
+        insights={snapshot.insights[usageGranularity]}
+        saveState={budgetSaveState}
+        saveError={budgetSaveError}
+        onSave={onSaveBudgets}
+        onSaveSettled={onBudgetSaveSettled}
+      />
 
       <section className={`workspace ${selected ? "" : "detail-closed"}`}>
         <div className="turns-panel">

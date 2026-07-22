@@ -72,11 +72,11 @@ const snapshot: DashboardSnapshot = {
       { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
     ]
   },
-  budgets: { daily: 0, weekly: 0, monthly: 0 },
+  budgets: { daily: 100, weekly: 1_000, monthly: 10_000 },
   insights: {
-    daily: emptyInsights("2026-07-09", "2026-07-09"),
-    weekly: emptyInsights("2026-07-13", "2026-07-19"),
-    monthly: emptyInsights("2026-08-01", "2026-08-31")
+    daily: { ...emptyInsights("2026-07-09", "2026-07-09"), total: 10 },
+    weekly: { ...emptyInsights("2026-07-13", "2026-07-19"), total: 200 },
+    monthly: { ...emptyInsights("2026-08-01", "2026-08-31"), total: 3_000 }
   },
   turns: [
     fixtureTurn("codex-turn", "codex", "Refactor the authentication parser", 600),
@@ -117,6 +117,10 @@ function renderApp(initialGranularity: UsageGranularity = "daily") {
         onRefresh={() => undefined}
         usageGranularity={usageGranularity}
         onUsageGranularityChange={setUsageGranularity}
+        budgetSaveState="idle"
+        budgetSaveError={null}
+        onSaveBudgets={() => undefined}
+        onBudgetSaveSettled={() => undefined}
       />
     );
   }
@@ -176,21 +180,28 @@ describe("App", () => {
     expect(screen.getByRole("complementary", { name: "Turn details" })).toBeInTheDocument();
   });
 
-  it("defaults to Daily and switches to the precomputed weekly and monthly series", () => {
+  it("switches chart series and guardrail values across Daily, Weekly, and Monthly", () => {
     renderApp();
 
     expect(screen.getByRole("radio", { name: "Daily" })).toBeChecked();
     expect(screen.getByRole("img", { name: "Daily token usage by source" })).toBeInTheDocument();
     expect(screen.getByText("Jul 9")).toBeInTheDocument();
+    const guardrails = screen.getByRole("heading", { name: "Usage Guardrails" }).closest("section")!;
+    expect(within(guardrails).getByText("Daily period ending 2026-07-09")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Used").parentElement!).getByText("10")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Weekly" }));
     expect(screen.getByRole("radio", { name: "Weekly" })).toBeChecked();
     expect(screen.getByRole("img", { name: "Weekly token usage by source" })).toBeInTheDocument();
     expect(screen.getByText("Jul 6–12")).toBeInTheDocument();
+    expect(within(guardrails).getByText("Weekly period ending 2026-07-19")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Used").parentElement!).getByText("200")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Monthly" }));
     expect(screen.getByRole("img", { name: "Monthly token usage by source" })).toBeInTheDocument();
     expect(screen.getByText("Jul 2026")).toBeInTheDocument();
+    expect(within(guardrails).getByText("Monthly period ending 2026-08-31")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Used").parentElement!).getByText(/3[.,]000/u)).toBeInTheDocument();
   });
 
   it("marks the current bucket in progress and retains partial-source styling", () => {
@@ -221,6 +232,10 @@ describe("App", () => {
           onRefresh={() => undefined}
           usageGranularity={usageGranularity}
           onUsageGranularityChange={() => undefined}
+          budgetSaveState="idle"
+          budgetSaveError={null}
+          onSaveBudgets={() => undefined}
+          onBudgetSaveSettled={() => undefined}
         />
       );
 
@@ -269,6 +284,10 @@ describe("App", () => {
         onRefresh={() => undefined}
         usageGranularity="weekly"
         onUsageGranularityChange={() => undefined}
+        budgetSaveState="idle"
+        budgetSaveError={null}
+        onSaveBudgets={() => undefined}
+        onBudgetSaveSettled={() => undefined}
       />
     );
 

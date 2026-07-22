@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardSnapshot, PeriodInsights } from "../../src/shared/dashboard.js";
 import { Root, type VsCodeApi } from "./Root.js";
@@ -53,6 +53,16 @@ function fakeVsCode(state: unknown): VsCodeApi {
   };
 }
 
+function deliver(data: unknown) {
+  act(() => {
+    window.dispatchEvent(new MessageEvent("message", { data }));
+  });
+}
+
+function guardrails() {
+  return within(screen.getByRole("heading", { name: "Usage Guardrails" }).closest("section")!);
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -63,9 +73,7 @@ describe("Root", () => {
     const vscode = fakeVsCode({ usageGranularity: "monthly" });
     render(<Root vscode={vscode} />);
 
-    act(() => {
-      window.dispatchEvent(new MessageEvent("message", { data: { type: "snapshot", snapshot } }));
-    });
+    deliver({ type: "snapshot", snapshot });
 
     expect(screen.getByRole("radio", { name: "Monthly" })).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: "Weekly" }));
@@ -80,10 +88,74 @@ describe("Root", () => {
     const vscode = fakeVsCode({ usageGranularity: "yearly" });
     render(<Root vscode={vscode} />);
 
-    act(() => {
-      window.dispatchEvent(new MessageEvent("message", { data: { type: "snapshot", snapshot } }));
-    });
+    deliver({ type: "snapshot", snapshot });
 
     expect(screen.getByRole("radio", { name: "Daily" })).toBeChecked();
+  });
+
+  it("posts one setBudgets message without refreshing", () => {
+    const vscode = fakeVsCode(null);
+    render(<Root vscode={vscode} />);
+    deliver({ type: "snapshot", snapshot });
+
+    fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
+    fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
+    fireEvent.change(guardrails().getByLabelText("Weekly"), { target: { value: "500" } });
+    fireEvent.change(guardrails().getByLabelText("Monthly"), { target: { value: "2000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const messages = vi.mocked(vscode.postMessage).mock.calls.map(([message]) => message);
+    expect(messages.filter((message) => message.type === "setBudgets")).toEqual([
+      { type: "setBudgets", budgets: { daily: 77, weekly: 500, monthly: 2_000 } }
+    ]);
+    expect(messages).not.toContainEqual({ type: "refresh" });
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+  });
+
+  it("keeps the dashboard and entered values visible after budgetError", () => {
+    const vscode = fakeVsCode(null);
+    render(<Root vscode={vscode} />);
+    deliver({ type: "snapshot", snapshot });
+
+    fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
+    fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    deliver({ type: "budgetError", message: "Could not save budgets" });
+
+    expect(screen.getByRole("heading", { name: "Token Usage" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not save budgets");
+    expect(guardrails().getByLabelText("Daily")).toHaveValue("77");
+  });
+
+  it("closes the editor when budgetsSaved follows the updated snapshot", () => {
+    const vscode = fakeVsCode(null);
+    render(<Root vscode={vscode} />);
+    deliver({ type: "snapshot", snapshot });
+
+    fireEvent.click(screen.getByRole("button", { name: "Set token budget" }));
+    fireEvent.change(guardrails().getByLabelText("Daily"), { target: { value: "77" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    deliver({
+      type: "snapshot",
+      snapshot: { ...snapshot, budgets: { ...snapshot.budgets, daily: 77 } }
+    });
+    expect(guardrails().getByLabelText("Daily")).toHaveValue("77");
+
+    deliver({ type: "budgetsSaved" });
+
+    expect(guardrails().queryByLabelText("Daily")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit budgets" })).toBeInTheDocument();
+  });
+
+  it("keeps fatal errors in the full-page error state", () => {
+    const vscode = fakeVsCode(null);
+    render(<Root vscode={vscode} />);
+    deliver({ type: "snapshot", snapshot });
+    deliver({ type: "error", message: "Dashboard unavailable" });
+
+    expect(screen.getByRole("heading", { name: "Token Usage" })).toBeInTheDocument();
+    expect(screen.getByText("Dashboard unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Usage Guardrails" })).not.toBeInTheDocument();
   });
 });
