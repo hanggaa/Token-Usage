@@ -21,7 +21,11 @@
 
 ---
 
-## Task 1: Build all local-calendar trend series in the extension service
+## Task 1: Build the calendar trend series and aggregation selector atomically
+
+This execution task combines the original service and chart tasks so the shared snapshot contract and every consumer change in one green commit. Do not commit or run the repository-wide typecheck between Part A and Part B.
+
+### Part A: Extension aggregation service
 
 **Files:**
 
@@ -263,29 +267,21 @@ const trends = {
 
 - [ ] Return `trends` instead of `trend`. Leave summary calculation, turns, and health untouched.
 
-### Step 6: Run focused tests and typecheck
+### Step 6: Run focused service tests
 
 - [ ] Run:
 
 ```sh
 npx vitest run tests/services/dashboard.test.ts
-npm run typecheck
 ```
 
-Expected: service tests pass. Typecheck may still report the known webview fixture/rendering references to `snapshot.trend`; those are resolved in Task 2, but there must be no service-layer errors.
+Expected: service tests pass. Continue directly into Part B before committing because the webview still consumes the old shared contract.
 
-### Step 7: Commit only the aggregation contract and service
+### Step 7: Do not commit the intermediate shared-contract state
 
-- [ ] Run:
+- [ ] Confirm only the Task 1 service files have changed so far, then continue directly to Part B. Do not commit and do not run the repository-wide typecheck while consumers still reference `snapshot.trend`.
 
-```sh
-git add src/shared/dashboard.ts src/services/dashboard.ts tests/services/dashboard.test.ts
-git commit -m "feat: aggregate daily weekly and monthly usage"
-```
-
----
-
-## Task 2: Add the accessible aggregation selector and render the selected series
+### Part B: Accessible aggregation selector and selected-series rendering
 
 **Files:**
 
@@ -590,24 +586,28 @@ npx vitest run webview/src/App.test.tsx
 
 Expected: all App tests pass, including selector, dynamic accessible name, in-progress tooltip, and partial styling.
 
-### Step 9: Commit only the chart UI work
+### Step 9: Verify and commit the complete green contract change
 
 - [ ] Run:
 
 ```sh
-git add webview/src/App.tsx webview/src/App.test.tsx webview/src/styles.css
+npm run typecheck
+npm test
+git add src/shared/dashboard.ts src/services/dashboard.ts tests/services/dashboard.test.ts webview/src/App.tsx webview/src/App.test.tsx webview/src/styles.css
 git commit -m "feat: add usage aggregation selector"
 ```
 
 ---
 
-## Task 3: Persist and validate the selected mode with webview state
+## Task 2: Persist and validate the selected mode with webview state
 
 **Files:**
 
 - Create: `webview/src/usage-state.ts`
 - Create: `webview/src/usage-state.test.ts`
-- Modify: `webview/src/main.tsx:1-69`
+- Create: `webview/src/Root.tsx`
+- Create: `webview/src/Root.test.tsx`
+- Modify: `webview/src/main.tsx:1-76`
 
 ### Step 1: Write failing persistence-boundary tests
 
@@ -683,13 +683,17 @@ export function writeUsageGranularity(
 
 ### Step 4: Wire state into the webview root without extension messages
 
-- [ ] In `webview/src/main.tsx`, extend the local VS Code API type:
+- [ ] Extract the current `Root` component from `webview/src/main.tsx` into `webview/src/Root.tsx`. Export `Root` and make its VS Code API dependency an explicit prop so its complete interaction can be tested:
 
 ```ts
-interface VsCodeApi {
+export interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
   getState(): unknown;
   setState(state: { usageGranularity: UsageGranularity }): void;
+}
+
+export function Root({ vscode }: { vscode: VsCodeApi | null }) {
+  // Existing snapshot, loading, error, and message-listener behavior moves here.
 }
 ```
 
@@ -708,14 +712,24 @@ const changeUsageGranularity = (next: UsageGranularity) => {
 };
 ```
 
-- [ ] Pass `usageGranularity` and `onUsageGranularityChange={changeUsageGranularity}` to `App`. Confirm the callback calls `setState` only and does not call `postMessage`.
+- [ ] Pass `usageGranularity` and `onUsageGranularityChange={changeUsageGranularity}` to `App`. Keep `webview/src/main.tsx` as the thin `acquireVsCodeApi` and `createRoot` bootstrap.
+
+- [ ] Create `webview/src/Root.test.tsx` with a typed fake API. Deliver a real snapshot through the existing `window` message listener, verify a valid saved Monthly value is selected, click Weekly, and assert exactly:
+
+```tsx
+expect(vscode.setState).toHaveBeenLastCalledWith({ usageGranularity: "weekly" });
+expect(vscode.postMessage).toHaveBeenCalledWith({ type: "ready" });
+expect(vscode.postMessage).not.toHaveBeenCalledWith({ type: "refresh" });
+```
+
+- [ ] Add a second Root assertion with malformed saved state and verify Daily is selected. This is the integration proof that restoration, selection, and persistence are connected through the production root rather than only testing serialization helpers.
 
 ### Step 5: Run persistence, App, and type tests
 
 - [ ] Run:
 
 ```sh
-npx vitest run webview/src/usage-state.test.ts webview/src/App.test.tsx
+npx vitest run webview/src/usage-state.test.ts webview/src/Root.test.tsx webview/src/App.test.tsx
 npm run typecheck
 ```
 
@@ -726,13 +740,13 @@ Expected: all focused tests pass and both extension and webview TypeScript proje
 - [ ] Run:
 
 ```sh
-git add webview/src/usage-state.ts webview/src/usage-state.test.ts webview/src/main.tsx
+git add webview/src/usage-state.ts webview/src/usage-state.test.ts webview/src/Root.tsx webview/src/Root.test.tsx webview/src/main.tsx
 git commit -m "feat: remember usage aggregation mode"
 ```
 
 ---
 
-## Task 4: Update visual fixtures and perform full verification
+## Task 3: Update visual fixtures and perform full verification
 
 **Files:**
 
