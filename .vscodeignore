@@ -3,6 +3,7 @@
 .vscode/**
 coverage/**
 docs/**
+graphify-out/**
 node_modules/**
 scripts/**
 src/**
@@ -12,4 +13,3 @@ webview/**
 tsconfig.json
 vite.config.ts
 vitest.config.ts
-

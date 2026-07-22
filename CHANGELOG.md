@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.3.0
+
+- Add a single Daily, Weekly, and Monthly selector to the Usage Over Time chart.
+- Precompute local-calendar daily, Monday–Sunday weekly, and monthly usage buckets.
+- Include the current period with an In progress treatment and remember the selected view.
+
+## 0.2.3
+
+- Fix OpenCode CLI import health on macOS when OpenCode is installed through NVM.
+- Import all OpenCode sessions from a consistent SQLite snapshot while its WAL is active.
+- Preserve compatible CLI and direct-database fallbacks for other OpenCode versions and platforms.
+
 ## 0.2.1
 
 - Disable background history imports by default to conserve battery.

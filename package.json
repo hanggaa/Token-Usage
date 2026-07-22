@@ -2,7 +2,7 @@
   "name": "token-usage-tracker",
   "displayName": "Token Usage Tracker",
   "description": "Private, local token usage tracking for Codex CLI, OpenCode CLI, and Antigravity IDE.",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "hadii",
   "icon": "media/icon.png",
   "license": "MIT",
