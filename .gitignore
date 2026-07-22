@@ -2,8 +2,8 @@ node_modules/
 dist/
 coverage/
 .vscode-test/
+.worktrees/
 *.vsix
 .superpowers/
 .token-usage-tracker/
 *.log
-
