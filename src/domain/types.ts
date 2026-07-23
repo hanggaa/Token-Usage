@@ -1,4 +1,6 @@
-export type Source = "codex" | "opencode" | "antigravity";
+export type Source = "codex" | "claude" | "opencode" | "antigravity";
+
+export type ExecutionScope = "main" | "subagent";
 
 export type MeasurementQuality = "exact" | "estimated" | "partial" | "unavailable";
 
@@ -33,6 +35,7 @@ export interface NormalizedTurn {
   source: Source;
   sourceSessionId: string;
   sourceTurnId: string;
+  executionScope: ExecutionScope;
   timestamp: string;
   model: string | null;
   provider: string | null;

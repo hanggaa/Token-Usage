@@ -14,6 +14,7 @@ function turn(
     source,
     sourceSessionId: `${source}-session`,
     sourceTurnId: id,
+    executionScope: "main",
     timestamp,
     model: "model",
     provider: "provider",
@@ -74,6 +75,17 @@ describe("buildDashboardSnapshot", () => {
     );
 
     expect(snapshot.budgets).toEqual({ daily: 1_000, weekly: 5_000, monthly: 20_000 });
+    expect(snapshot.forecasts.daily).toMatchObject({
+      projectedTotal: 500,
+      projectedBudgetPercent: 50,
+      remainingBudget: 750,
+      recommendedAllowance: 62,
+      allowanceUnit: "hour",
+      confidence: "medium",
+      quality: "exact",
+      status: "on_pace",
+      elapsedRatio: 0.5
+    });
     expect(snapshot.insights.daily).toMatchObject({
       startDate: "2026-07-22",
       endDate: "2026-07-22",
@@ -110,6 +122,7 @@ describe("buildDashboardSnapshot", () => {
     const snapshot = buildDashboardSnapshot(
       [
         turn("codex", localTimestamp(2026, 6, 9, 9), "codex", 100, "exact"),
+        turn("claude", localTimestamp(2026, 6, 9, 9), "claude", 75, "exact"),
         turn("open", localTimestamp(2026, 6, 9, 10), "opencode", 50, "exact"),
         turn("partial", localTimestamp(2026, 6, 9, 10), "antigravity", 25, "partial"),
         turn("ag", localTimestamp(2026, 6, 9, 11), "antigravity", null, "unavailable")
@@ -121,6 +134,7 @@ describe("buildDashboardSnapshot", () => {
     for (const granularity of ["daily", "weekly", "monthly"] as const) {
       expect(snapshot.trends[granularity].at(-1)).toMatchObject({
       codex: 100,
+      claude: 75,
       opencode: 50,
       antigravity: 25,
       partialSources: ["antigravity"]

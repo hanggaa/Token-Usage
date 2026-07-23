@@ -107,6 +107,7 @@ export function parseOpenCodeExport(raw: unknown, sourcePath: string): ParsedSes
       source: "opencode",
       sourceSessionId: sessionId,
       sourceTurnId: info.id,
+      executionScope: "main",
       timestamp: toIso(userTime.created) ?? new Date(0).toISOString(),
       model,
       provider,
@@ -140,4 +141,3 @@ export function parseOpenCodeExport(raw: unknown, sourcePath: string): ParsedSes
     turns
   };
 }
-

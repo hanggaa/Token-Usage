@@ -2,6 +2,29 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("extension background-import defaults", () => {
+  it("enables and wires Claude Code CLI history by default", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
+      contributes: {
+        configuration: {
+          properties: Record<string, { type?: string; default: unknown }>;
+        };
+      };
+    };
+    const properties = manifest.contributes.configuration.properties;
+    const source = await readFile("src/extension.ts", "utf8");
+
+    expect(properties["tokenUsage.sources.claude.enabled"]).toMatchObject({
+      type: "boolean",
+      default: true
+    });
+    expect(properties["tokenUsage.paths.claude"]).toMatchObject({
+      type: "string",
+      default: ""
+    });
+    expect(source).toContain("new ClaudeAdapter(claudeRoot)");
+    expect(source).toContain('"sources.claude.enabled"');
+  });
+
   it("keeps background imports opt-in with a battery-conscious interval", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
       contributes: {

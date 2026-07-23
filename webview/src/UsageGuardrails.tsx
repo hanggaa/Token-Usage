@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import type {
   PeriodInsights,
   RankedContributor,
+  UsageForecast,
   UsageBudgets,
   UsageGranularity
 } from "../../src/shared/dashboard.js";
@@ -12,6 +13,7 @@ export interface UsageGuardrailsProps {
   granularity: UsageGranularity;
   budgets: UsageBudgets;
   insights: PeriodInsights;
+  forecast: UsageForecast;
   saveState: BudgetSaveState;
   saveError: string | null;
   onSave: (budgets: UsageBudgets) => void;
@@ -25,11 +27,55 @@ const periodLabels: Record<UsageGranularity, string> = {
 };
 const sourceLabels = {
   codex: "Codex",
+  claude: "Claude Code",
   opencode: "OpenCode",
   antigravity: "Antigravity"
 };
 const budgetKeys: Array<keyof UsageBudgets> = ["daily", "weekly", "monthly"];
 const numberFormatter = new Intl.NumberFormat();
+const forecastStatusLabels: Record<UsageForecast["status"], string> = {
+  on_pace: "On pace",
+  at_risk: "At risk",
+  likely_to_exceed: "Likely to exceed",
+  budget_exceeded: "Budget exceeded",
+  incomplete_data: "Incomplete data",
+  no_budget: "No budget configured",
+  not_enough_elapsed_time: "Not enough elapsed time"
+};
+const forecastStatusClasses: Record<UsageForecast["status"], string> = {
+  on_pace: "on-track",
+  at_risk: "approaching",
+  likely_to_exceed: "exceeded",
+  budget_exceeded: "exceeded",
+  incomplete_data: "approaching",
+  no_budget: "disabled",
+  not_enough_elapsed_time: "disabled"
+};
+
+function forecastPrefix(quality: UsageForecast["quality"]): string {
+  if (quality === "partial") return "≥";
+  if (quality === "estimated") return "≈";
+  return "";
+}
+
+function formatProjectedValue(forecast: UsageForecast, value: number | null): string {
+  if (value == null) {
+    return forecast.status === "not_enough_elapsed_time"
+      ? "Not enough elapsed time"
+      : "—";
+  }
+  return `${forecastPrefix(forecast.quality)}${numberFormatter.format(Math.round(value))}`;
+}
+
+function formatProjectedPercent(forecast: UsageForecast): string {
+  if (forecast.projectedBudgetPercent == null) return "—";
+  return `${forecastPrefix(forecast.quality)}${forecast.projectedBudgetPercent.toFixed(1)}%`;
+}
+
+function confidenceLabel(confidence: UsageForecast["confidence"]): string {
+  if (confidence == null) return "—";
+  return confidence[0].toUpperCase() + confidence.slice(1);
+}
 
 function budgetStatus(used: number, budget: number) {
   if (budget === 0) return { label: "No budget set", className: "disabled" };
@@ -89,6 +135,7 @@ export function UsageGuardrails({
   granularity,
   budgets,
   insights,
+  forecast,
   saveState,
   saveError,
   onSave,
@@ -154,7 +201,14 @@ export function UsageGuardrails({
       <div className="guardrail-budget">
         <div><span>Used</span><strong>{insights.partial ? "≥" : ""}{numberFormatter.format(insights.total)}</strong></div>
         <div><span>Limit</span><strong>{budget === 0 ? "Disabled" : numberFormatter.format(budget)}</strong></div>
-        <div><span>Remaining</span><strong>{budget === 0 ? "—" : numberFormatter.format(remaining)}</strong></div>
+        <div>
+          <span>Remaining</span>
+          <strong>
+            {budget === 0
+              ? "—"
+              : `${insights.partial ? "≤" : ""}${numberFormatter.format(remaining)}`}
+          </strong>
+        </div>
         <div><span>Usage</span><strong>{budget === 0 ? "—" : `${percent.toFixed(1)}%`}</strong></div>
         <p className={`budget-status ${status.className}`}>{status.label}</p>
         {insights.partial && <span className="partial-badge">Partial data</span>}
@@ -162,6 +216,41 @@ export function UsageGuardrails({
           {Math.min(percent, 100)}%
         </progress>
       </div>
+
+      <section className="forecast-summary" aria-labelledby="usage-forecast-heading">
+        <div className="forecast-heading">
+          <h3 id="usage-forecast-heading">Usage forecast</h3>
+          <p className={`forecast-status ${forecastStatusClasses[forecast.status]}`}>
+            {forecastStatusLabels[forecast.status]}
+          </p>
+        </div>
+        <div className="forecast-metrics">
+          <div>
+            <span>Projected total</span>
+            <strong>{formatProjectedValue(forecast, forecast.projectedTotal)}</strong>
+          </div>
+          <div>
+            <span>Projected budget usage</span>
+            <strong>{formatProjectedPercent(forecast)}</strong>
+          </div>
+          <div>
+            <span>
+              Recommended per remaining {forecast.allowanceUnit}
+            </span>
+            <strong>
+              {forecast.recommendedAllowance == null
+                ? "—"
+                : `${forecast.quality === "partial" ? "≤" : ""}${numberFormatter.format(
+                  Math.round(forecast.recommendedAllowance)
+                )}`}
+            </strong>
+          </div>
+          <div>
+            <span>Confidence</span>
+            <strong>{confidenceLabel(forecast.confidence)}</strong>
+          </div>
+        </div>
+      </section>
 
       {editing && (
         <div className="budget-editor">

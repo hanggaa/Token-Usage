@@ -48,8 +48,8 @@ await new Promise((resolveReady) => server.listen(0, "127.0.0.1", resolveReady))
 const address = server.address();
 const port = typeof address === "object" && address ? address.port : 0;
 
-const sources = ["codex", "opencode", "antigravity"];
-const models = ["gpt-5", "claude-sonnet-4", "gemini-3-pro"];
+const sources = ["codex", "claude", "opencode", "antigravity"];
+const models = ["gpt-5", "claude-sonnet-4", "gpt-5", "gemini-3-pro"];
 const prompts = [
   "Refactor auth middleware to support API key auth",
   "Add rate limiting to the upload endpoint",
@@ -70,9 +70,10 @@ const turns = prompts.map((prompt, index) => {
     source,
     sourceSessionId: `session-${index}`,
     sourceTurnId: `turn-${index}`,
+    executionScope: source === "claude" && index === 5 ? "subagent" : "main",
     timestamp: new Date(2026, 6, 9, 11 - Math.floor(index / 2), 23 - index * 2, 41).toISOString(),
     model: models[index % models.length],
-    provider: source === "opencode" ? "anthropic" : source === "codex" ? "openai" : "google",
+    provider: source === "claude" ? "anthropic" : source === "antigravity" ? "google" : "openai",
     project: index % 2 ? "/Users/dev/atlas-web" : "/Users/dev/infra-tools",
     prompt,
     response:
@@ -160,6 +161,7 @@ const snapshot = {
         endDate: date,
         inProgress: index === 13,
         codex: 650_000 + (index % 5) * 70_000,
+        claude: 510_000 + (index % 4) * 65_000,
         opencode: 420_000 + (index % 4) * 80_000,
         antigravity: 250_000 + (index % 3) * 60_000,
         partialSources: ["antigravity"]
@@ -175,6 +177,7 @@ const snapshot = {
         endDate: formatDate(end),
         inProgress: index === 11,
         codex: 3_750_000 + (index % 5) * 420_000,
+        claude: 3_100_000 + (index % 4) * 390_000,
         opencode: 2_450_000 + (index % 4) * 480_000,
         antigravity: 1_500_000 + (index % 3) * 360_000,
         partialSources: ["antigravity"]
@@ -190,6 +193,7 @@ const snapshot = {
         endDate: formatDate(end),
         inProgress: index === 11,
         codex: 15_600_000 + (index % 5) * 1_700_000,
+        claude: 12_400_000 + (index % 4) * 1_520_000,
         opencode: 10_080_000 + (index % 4) * 1_920_000,
         antigravity: 6_000_000 + (index % 3) * 1_440_000,
         partialSources: ["antigravity"]
@@ -198,6 +202,41 @@ const snapshot = {
   },
   turns,
   budgets: { daily: 2_000_000, weekly: 10_000_000, monthly: 40_000_000 },
+  forecasts: {
+    daily: {
+      projectedTotal: 3_878_646,
+      projectedBudgetPercent: 193.93,
+      remainingBudget: 157_643,
+      recommendedAllowance: 12_948,
+      allowanceUnit: "hour",
+      confidence: "medium",
+      quality: "partial",
+      status: "likely_to_exceed",
+      elapsedRatio: 0.475
+    },
+    weekly: {
+      projectedTotal: 17_300_000,
+      projectedBudgetPercent: 173,
+      remainingBudget: 1_350_000,
+      recommendedAllowance: 385_714,
+      allowanceUnit: "day",
+      confidence: "medium",
+      quality: "partial",
+      status: "likely_to_exceed",
+      elapsedRatio: 0.5
+    },
+    monthly: {
+      projectedTotal: 116_058_394,
+      projectedBudgetPercent: 290.15,
+      remainingBudget: 8_200_000,
+      recommendedAllowance: 372_727,
+      allowanceUnit: "day",
+      confidence: "medium",
+      quality: "estimated",
+      status: "likely_to_exceed",
+      elapsedRatio: 0.274
+    }
+  },
   insights: {
     daily: makeInsights("2026-07-09", "2026-07-09", 1_842_357),
     weekly: makeInsights("2026-07-06", "2026-07-12", 8_650_000),
@@ -205,6 +244,7 @@ const snapshot = {
   },
   health: [
     { source: "codex", complete: true, completedAt: new Date().toISOString(), sessionCount: 12, turnCount: 64, issues: [] },
+    { source: "claude", complete: true, completedAt: new Date().toISOString(), sessionCount: 8, turnCount: 36, issues: [] },
     { source: "opencode", complete: true, completedAt: new Date().toISOString(), sessionCount: 9, turnCount: 48, issues: [] },
     {
       source: "antigravity",
@@ -236,15 +276,23 @@ try {
   await page.getByLabel("Source", { exact: true }).selectOption("opencode");
   await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 2);
   await page.getByLabel("Source", { exact: true }).selectOption("all");
-  await page.getByText("Add rate limiting to the upload endpoint", { exact: true }).first().click();
+  await page.getByText("Improve deployment documentation", { exact: true }).first().click();
   await page.getByRole("complementary", { name: "Turn details" }).getByText(
-    "Add rate limiting to the upload endpoint",
+    "Improve deployment documentation",
     { exact: true }
   ).waitFor();
+  await page.getByRole("complementary", { name: "Turn details" }).getByText(
+    "Subagent",
+    { exact: true }
+  ).first().waitFor();
   await page.getByText("Weekly", { exact: true }).click();
   await page.getByRole("radio", { name: "Weekly" }).check();
   await page.getByRole("img", { name: "Weekly token usage by source" }).waitFor();
   await page.getByRole("heading", { name: "Usage Guardrails" }).waitFor();
+  await page.getByText("Projected total", { exact: true }).waitFor();
+  await page.getByText("Likely to exceed", { exact: true }).waitFor();
+  await page.getByText("Confidence", { exact: true }).waitFor();
+  await page.getByText("Medium", { exact: true }).waitFor();
   await page.getByText("Approaching limit", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Edit budgets" }).click();
   const budgetEditor = page.locator(".budget-editor");

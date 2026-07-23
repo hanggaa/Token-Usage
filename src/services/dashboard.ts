@@ -19,6 +19,7 @@ import {
   type CalendarPeriod
 } from "./calendar-periods.js";
 import { buildUsageInsights } from "./usage-insights.js";
+import { buildUsageForecasts } from "./usage-forecast.js";
 
 interface SourceAccumulator {
   value: number;
@@ -29,6 +30,7 @@ interface SourceAccumulator {
 function emptySources(): Record<Source, SourceAccumulator> {
   return {
     codex: { value: 0, seen: false, qualities: new Set() },
+    claude: { value: 0, seen: false, qualities: new Set() },
     opencode: { value: 0, seen: false, qualities: new Set() },
     antigravity: { value: 0, seen: false, qualities: new Set() }
   };
@@ -64,6 +66,7 @@ function buildTrend(turns: NormalizedTurn[], periods: CalendarPeriod[]): TrendPo
       endDate,
       inProgress: index === periods.length - 1,
       codex: sourceValues.codex.seen ? sourceValues.codex.value : null,
+      claude: sourceValues.claude.seen ? sourceValues.claude.value : null,
       opencode: sourceValues.opencode.seen ? sourceValues.opencode.value : null,
       antigravity: sourceValues.antigravity.seen ? sourceValues.antigravity.value : null,
       partialSources: SOURCES.filter((source) =>
@@ -121,6 +124,7 @@ export function buildDashboardSnapshot(
     },
     trends,
     budgets,
+    forecasts: buildUsageForecasts(turns, budgets, now),
     insights: buildUsageInsights(turns, now),
     turns,
     health

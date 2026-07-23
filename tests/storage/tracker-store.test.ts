@@ -1,7 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import initSqlJs from "sql.js";
 import type {
   ImportResult,
   NormalizedSession,
@@ -17,6 +18,58 @@ async function createStore(name = "usage.sqlite"): Promise<TrackerStore> {
   temporaryRoots.push(root);
   return TrackerStore.open({
     databasePath: join(root, name),
+    wasmPath: resolve("node_modules/sql.js/dist/sql-wasm.wasm")
+  });
+}
+
+async function createLegacyStore(): Promise<TrackerStore> {
+  const root = await mkdtemp(join(tmpdir(), "token-store-legacy-test-"));
+  temporaryRoots.push(root);
+  const databasePath = join(root, "usage.sqlite");
+  const SQL = await initSqlJs({
+    locateFile: (file) => resolve("node_modules/sql.js/dist", file)
+  });
+  const database = new SQL.Database();
+  database.run(`
+    CREATE TABLE turns (
+      id TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      source_session_id TEXT NOT NULL,
+      source_turn_id TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      model TEXT,
+      provider TEXT,
+      project TEXT,
+      prompt TEXT NOT NULL,
+      response TEXT NOT NULL,
+      tool_event_count INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL
+    )
+  `);
+  database.run(
+    `INSERT INTO turns
+      (id, source, source_session_id, source_turn_id, timestamp, model, provider, project,
+       prompt, response, tool_event_count, fingerprint)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      "codex:legacy:turn",
+      "codex",
+      "legacy",
+      "turn",
+      "2026-07-09T00:00:00.000Z",
+      "gpt-5",
+      "openai",
+      "/project",
+      "Legacy prompt",
+      "Legacy response",
+      0,
+      "legacy-turn"
+    ]
+  );
+  await writeFile(databasePath, database.export());
+  database.close();
+  return TrackerStore.open({
+    databasePath,
     wasmPath: resolve("node_modules/sql.js/dist/sql-wasm.wasm")
   });
 }
@@ -41,6 +94,7 @@ function fixtureImport(source: Source, sessionId: string, complete = true): Impo
     source,
     sourceSessionId: sessionId,
     sourceTurnId: "turn-1",
+    executionScope: "main",
     timestamp: "2026-07-09T00:00:00.000Z",
     model: "test-model",
     provider: "test-provider",
@@ -86,6 +140,32 @@ describe("TrackerStore", () => {
         expect.objectContaining({ kind: "total", value: 120, quality: "exact" })
       ])
     );
+  });
+
+  it("migrates pre-0.5 turns to the main execution scope", async () => {
+    const store = await createLegacyStore();
+
+    expect(await store.getTurns()).toEqual([
+      expect.objectContaining({
+        id: "codex:legacy:turn",
+        executionScope: "main"
+      })
+    ]);
+  });
+
+  it("persists Claude subagent scope", async () => {
+    const store = await createStore();
+    const imported = fixtureImport("claude", "session-1");
+    imported.turns[0].executionScope = "subagent";
+
+    await store.applyImport(imported);
+
+    expect(await store.getTurns()).toEqual([
+      expect.objectContaining({
+        source: "claude",
+        executionScope: "subagent"
+      })
+    ]);
   });
 
   it("does not mirror deletions after an incomplete source scan", async () => {
@@ -141,4 +221,3 @@ describe("TrackerStore", () => {
     expect(await store.getHealth()).toEqual([]);
   });
 });
-

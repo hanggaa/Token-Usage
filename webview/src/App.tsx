@@ -43,6 +43,7 @@ interface AppProps {
 
 const SOURCE_LABELS: Record<Source, string> = {
   codex: "Codex",
+  claude: "Claude Code",
   opencode: "OpenCode",
   antigravity: "Antigravity"
 };
@@ -312,7 +313,7 @@ function ImportHealth({ snapshot }: { snapshot: DashboardSnapshot }) {
             <div className="health-row" key={source}>
               <span>
                 <i className={`health-dot ${healthy ? "healthy" : "warning"}`} />
-                {SOURCE_LABELS[source]} {source === "codex" || source === "opencode" ? "CLI" : "IDE"}
+                {SOURCE_LABELS[source]} {source === "antigravity" ? "IDE" : "CLI"}
               </span>
               <strong className={healthy ? "healthy-text" : "warning-text"}>
                 {health ? (healthy ? "Healthy" : "Needs attention") : "Not scanned"}
@@ -368,6 +369,9 @@ function TurnDetails({
         <span>{timeFormatter.format(new Date(turn.timestamp))}</span>
         <i className={`source-dot source-${turn.source}`} />
         <span>{SOURCE_LABELS[turn.source]}</span>
+        {turn.executionScope === "subagent" ? (
+          <span className="execution-badge">Subagent</span>
+        ) : null}
         <span>•</span>
         <span>{turn.model ?? "Unknown model"}</span>
         <span>•</span>
@@ -383,7 +387,12 @@ function TurnDetails({
       </header>
       <section>
         <h3>Prompt</h3>
-        <pre>{turn.prompt || "Prompt text retention is disabled."}</pre>
+        <pre>
+          {turn.prompt
+            || (turn.executionScope === "subagent"
+              ? "Prompt unavailable."
+              : "Prompt text retention is disabled.")}
+        </pre>
       </section>
       <section>
         <h3>Response (preview)</h3>
@@ -410,6 +419,8 @@ function TurnDetails({
           <dd>{turn.sourceTurnId}</dd>
           <dt>Tool events</dt>
           <dd>{turn.toolEventCount}</dd>
+          <dt>Execution</dt>
+          <dd>{turn.executionScope === "subagent" ? "Subagent" : "Main"}</dd>
           <dt>Imported source</dt>
           <dd>{SOURCE_LABELS[turn.source]}</dd>
         </dl>
@@ -526,6 +537,7 @@ export function App({
         granularity={usageGranularity}
         budgets={snapshot.budgets}
         insights={snapshot.insights[usageGranularity]}
+        forecast={snapshot.forecasts[usageGranularity]}
         saveState={budgetSaveState}
         saveError={budgetSaveError}
         onSave={onSaveBudgets}
@@ -597,10 +609,23 @@ export function App({
                     }}
                   >
                     <td>{timeFormatter.format(new Date(turn.timestamp))}</td>
-                    <td><i className={`source-dot source-${turn.source}`} />{SOURCE_LABELS[turn.source]}</td>
+                    <td className="source-cell">
+                      <span>
+                        <i className={`source-dot source-${turn.source}`} />
+                        {SOURCE_LABELS[turn.source]}
+                      </span>
+                      {turn.executionScope === "subagent" ? (
+                        <span className="execution-badge">Subagent</span>
+                      ) : null}
+                    </td>
                     <td>{turn.model ?? "—"}</td>
                     <td>{projectName(turn.project)}</td>
-                    <td className="prompt-cell">{turn.prompt || "Content not retained"}</td>
+                    <td className="prompt-cell">
+                      {turn.prompt
+                        || (turn.executionScope === "subagent"
+                          ? "Prompt unavailable"
+                          : "Content not retained")}
+                    </td>
                     <td>{formatMetric(metricFor(turn, "typed_input"))}</td>
                     <td>{formatMetric(metricFor(turn, "request_input"))}</td>
                     <td>{formatMetric(metricFor(turn, "cached_input"))}</td>

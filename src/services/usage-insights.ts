@@ -9,7 +9,7 @@ import { addLocalDays, currentCalendarPeriod } from "./calendar-periods.js";
 
 const GRANULARITIES: UsageGranularity[] = ["daily", "weekly", "monthly"];
 const SOURCE_LABELS: Record<Source, string> = {
-  codex: "Codex", opencode: "OpenCode", antigravity: "Antigravity"
+  codex: "Codex", claude: "Claude Code", opencode: "OpenCode", antigravity: "Antigravity"
 };
 
 function totalMetric(turn: NormalizedTurn): TokenMetric | undefined {

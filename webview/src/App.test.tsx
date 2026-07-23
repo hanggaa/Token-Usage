@@ -34,10 +34,11 @@ function fixtureTurn(
     source,
     sourceSessionId: `${source}-session`,
     sourceTurnId: id,
+    executionScope: source === "claude" && id.includes("subagent") ? "subagent" : "main",
     timestamp: "2026-07-09T03:00:00.000Z",
-    model: source === "opencode" ? "claude-sonnet-4" : "gpt-5",
-    provider: source === "opencode" ? "anthropic" : "openai",
-    project: source === "opencode" ? "/project/api" : "/project/web",
+    model: source === "claude" ? "claude-sonnet-4" : source === "antigravity" ? "gemini-3-pro" : "gpt-5",
+    provider: source === "claude" ? "anthropic" : source === "antigravity" ? "google" : "openai",
+    project: source === "claude" || source === "opencode" ? "/project/api" : "/project/web",
     prompt,
     response: `Response for ${prompt}`,
     toolEventCount: 2,
@@ -60,19 +61,54 @@ const snapshot: DashboardSnapshot = {
   },
   trends: {
     daily: [
-      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, opencode: 100, antigravity: null },
-      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, opencode: 200, antigravity: 50, partialSources: ["antigravity"] }
+      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: null },
+      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, partialSources: ["antigravity"] }
     ],
     weekly: [
-      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
-      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
+      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
+      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50 }
     ],
     monthly: [
-      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
-      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, opencode: 200, antigravity: 50 }
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
+      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50 }
     ]
   },
   budgets: { daily: 100, weekly: 250, monthly: 2_000 },
+  forecasts: {
+    daily: {
+      projectedTotal: 20,
+      projectedBudgetPercent: 20,
+      remainingBudget: 90,
+      recommendedAllowance: 4,
+      allowanceUnit: "hour",
+      confidence: "low",
+      quality: "exact",
+      status: "on_pace",
+      elapsedRatio: 0.5
+    },
+    weekly: {
+      projectedTotal: 300,
+      projectedBudgetPercent: 120,
+      remainingBudget: 50,
+      recommendedAllowance: 25,
+      allowanceUnit: "day",
+      confidence: "medium",
+      quality: "estimated",
+      status: "likely_to_exceed",
+      elapsedRatio: 0.5
+    },
+    monthly: {
+      projectedTotal: 3_500,
+      projectedBudgetPercent: 175,
+      remainingBudget: 0,
+      recommendedAllowance: 0,
+      allowanceUnit: "day",
+      confidence: "medium",
+      quality: "partial",
+      status: "budget_exceeded",
+      elapsedRatio: 0.75
+    }
+  },
   insights: {
     daily: { ...emptyInsights("2026-07-09", "2026-07-09"), total: 10 },
     weekly: { ...emptyInsights("2026-07-13", "2026-07-19"), total: 200 },
@@ -80,11 +116,20 @@ const snapshot: DashboardSnapshot = {
   },
   turns: [
     fixtureTurn("codex-turn", "codex", "Refactor the authentication parser", 600),
+    fixtureTurn("claude-subagent-turn", "claude", "Inspect the parser tests", 200),
     fixtureTurn("open-turn", "opencode", "Write the database migration", 400)
   ],
   health: [
     {
       source: "codex",
+      complete: true,
+      completedAt: "2026-07-09T04:00:00.000Z",
+      sessionCount: 1,
+      turnCount: 1,
+      issues: []
+    },
+    {
+      source: "claude",
       complete: true,
       completedAt: "2026-07-09T04:00:00.000Z",
       sessionCount: 1,
@@ -169,6 +214,19 @@ describe("App", () => {
     expect(within(details).getByText("Request input")).toBeInTheDocument();
   });
 
+  it("shows Claude Code subagent usage with badges in the table and details", () => {
+    renderApp();
+
+    const table = screen.getByRole("table", { name: "Token usage by turn" });
+    fireEvent.click(within(table).getByText("Inspect the parser tests"));
+
+    expect(within(table).getByText("Claude Code")).toBeInTheDocument();
+    expect(within(table).getByText("Subagent")).toBeInTheDocument();
+    const details = screen.getByRole("complementary", { name: "Turn details" });
+    expect(within(details).getAllByText("Claude Code")).toHaveLength(2);
+    expect(within(details).getAllByText("Subagent")).toHaveLength(2);
+  });
+
   it("closes the detail panel and reopens it when another row is selected", () => {
     renderApp();
 
@@ -191,6 +249,9 @@ describe("App", () => {
     expect(within(within(guardrails).getByText("Used").parentElement!).getByText("10")).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Limit").parentElement!).getByText("100")).toBeInTheDocument();
     expect(within(guardrails).getByText("On track")).toBeInTheDocument();
+    expect(within(guardrails).getByText("On pace")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Projected total").parentElement!).getByText("20")).toBeInTheDocument();
+    expect(within(guardrails).getByText("Recommended per remaining hour")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Weekly" }));
     expect(screen.getByRole("radio", { name: "Weekly" })).toBeChecked();
@@ -200,6 +261,9 @@ describe("App", () => {
     expect(within(within(guardrails).getByText("Used").parentElement!).getByText("200")).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Limit").parentElement!).getByText("250")).toBeInTheDocument();
     expect(within(guardrails).getByText("Approaching limit")).toBeInTheDocument();
+    expect(within(guardrails).getByText("Likely to exceed")).toBeInTheDocument();
+    expect(within(within(guardrails).getByText("Projected total").parentElement!).getByText("≈300")).toBeInTheDocument();
+    expect(within(guardrails).getByText("Recommended per remaining day")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Monthly" }));
     expect(screen.getByRole("img", { name: "Monthly token usage by source" })).toBeInTheDocument();
@@ -207,7 +271,8 @@ describe("App", () => {
     expect(within(guardrails).getByText("Monthly period ending 2026-08-31")).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Used").parentElement!).getByText(/3[.,]000/u)).toBeInTheDocument();
     expect(within(within(guardrails).getByText("Limit").parentElement!).getByText(/2[.,]000/u)).toBeInTheDocument();
-    expect(within(guardrails).getByText("Budget exceeded")).toBeInTheDocument();
+    expect(within(guardrails).getAllByText("Budget exceeded")).toHaveLength(2);
+    expect(within(within(guardrails).getByText("Projected total").parentElement!).getByText(/≥3[.,]500/u)).toBeInTheDocument();
   });
 
   it("marks the current bucket in progress and retains partial-source styling", () => {
@@ -268,6 +333,7 @@ describe("App", () => {
             endDate: "2026-08-02",
             inProgress: false,
             codex: 200,
+            claude: null,
             opencode: 100,
             antigravity: 50
           },
@@ -276,6 +342,7 @@ describe("App", () => {
             endDate: "2027-01-03",
             inProgress: false,
             codex: 600,
+            claude: null,
             opencode: 200,
             antigravity: 50
           }
@@ -299,11 +366,11 @@ describe("App", () => {
 
     expect(screen.getByText("Jul 27–Aug 2").closest(".chart-column")).toHaveAttribute(
       "title",
-      "July 27, 2026–August 2, 2026\nTotal: 350\nCodex: 200\nOpenCode: 100\nAntigravity: 50"
+      "July 27, 2026–August 2, 2026\nTotal: 350\nCodex: 200\nClaude Code: Unavailable\nOpenCode: 100\nAntigravity: 50"
     );
     expect(screen.getByText("Dec 28–Jan 3").closest(".chart-column")).toHaveAttribute(
       "title",
-      "December 28, 2026–January 3, 2027\nTotal: 850\nCodex: 600\nOpenCode: 200\nAntigravity: 50"
+      "December 28, 2026–January 3, 2027\nTotal: 850\nCodex: 600\nClaude Code: Unavailable\nOpenCode: 200\nAntigravity: 50"
     );
   });
 });

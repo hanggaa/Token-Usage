@@ -26,16 +26,51 @@ const snapshot: DashboardSnapshot = {
   },
   trends: {
     daily: [
-      { startDate: "2026-07-22", endDate: "2026-07-22", inProgress: true, codex: 1_000, opencode: 0, antigravity: 0 }
+      { startDate: "2026-07-22", endDate: "2026-07-22", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0 }
     ],
     weekly: [
-      { startDate: "2026-07-20", endDate: "2026-07-26", inProgress: true, codex: 1_000, opencode: 0, antigravity: 0 }
+      { startDate: "2026-07-20", endDate: "2026-07-26", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0 }
     ],
     monthly: [
-      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, opencode: 0, antigravity: 0 }
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0 }
     ]
   },
   budgets: { daily: 0, weekly: 0, monthly: 0 },
+  forecasts: {
+    daily: {
+      projectedTotal: 1_200,
+      projectedBudgetPercent: null,
+      remainingBudget: null,
+      recommendedAllowance: null,
+      allowanceUnit: "hour",
+      confidence: "medium",
+      quality: "exact",
+      status: "no_budget",
+      elapsedRatio: 0.5
+    },
+    weekly: {
+      projectedTotal: 3_000,
+      projectedBudgetPercent: null,
+      remainingBudget: null,
+      recommendedAllowance: null,
+      allowanceUnit: "day",
+      confidence: "low",
+      quality: "exact",
+      status: "no_budget",
+      elapsedRatio: 0.2
+    },
+    monthly: {
+      projectedTotal: 8_000,
+      projectedBudgetPercent: null,
+      remainingBudget: null,
+      recommendedAllowance: null,
+      allowanceUnit: "day",
+      confidence: "high",
+      quality: "exact",
+      status: "no_budget",
+      elapsedRatio: 0.7
+    }
+  },
   insights: {
     daily: emptyInsights("2026-07-22", "2026-07-22"),
     weekly: emptyInsights("2026-07-20", "2026-07-26"),

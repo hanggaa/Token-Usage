@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { PeriodInsights } from "../../src/shared/dashboard.js";
+import type { PeriodInsights, UsageForecast } from "../../src/shared/dashboard.js";
 import { UsageGuardrails, type UsageGuardrailsProps } from "./UsageGuardrails.js";
 
 const baseInsights: PeriodInsights = {
@@ -30,6 +30,18 @@ const baseInsights: PeriodInsights = {
   hasComparableHistory: true
 };
 
+const baseForecast: UsageForecast = {
+  projectedTotal: 700,
+  projectedBudgetPercent: 70,
+  remainingBudget: 200,
+  recommendedAllowance: 25,
+  allowanceUnit: "hour",
+  confidence: "medium",
+  quality: "exact",
+  status: "on_pace",
+  elapsedRatio: 0.5
+};
+
 afterEach(cleanup);
 
 function renderGuardrails(options: {
@@ -37,6 +49,7 @@ function renderGuardrails(options: {
   used?: number;
   partial?: boolean;
   insights?: Partial<PeriodInsights>;
+  forecast?: Partial<UsageForecast>;
   props?: Partial<UsageGuardrailsProps>;
 } = {}) {
   const onSave = vi.fn();
@@ -50,6 +63,10 @@ function renderGuardrails(options: {
       partial: options.partial ?? baseInsights.partial,
       ...options.insights
     },
+    forecast: {
+      ...baseForecast,
+      ...options.forecast
+    },
     saveState: "idle",
     saveError: null,
     onSave,
@@ -57,6 +74,10 @@ function renderGuardrails(options: {
     ...options.props
   };
   return { ...render(<UsageGuardrails {...props} />), props, onSave, onSaveSettled };
+}
+
+function forecastSection() {
+  return within(screen.getByRole("heading", { name: "Usage forecast" }).closest("section")!);
 }
 
 it.each([
@@ -67,6 +88,102 @@ it.each([
 ])("maps %s percent to %s", (used, status) => {
   renderGuardrails({ budget: 100, used });
   expect(screen.getByText(status)).toBeInTheDocument();
+});
+
+it("shows the active forecast values, status, allowance unit, and confidence", () => {
+  renderGuardrails();
+  const forecast = forecastSection();
+
+  expect(forecast.getByText("On pace")).toBeInTheDocument();
+  expect(within(forecast.getByText("Projected total").parentElement!).getByText("700")).toBeInTheDocument();
+  expect(within(forecast.getByText("Projected budget usage").parentElement!).getByText("70.0%")).toBeInTheDocument();
+  expect(forecast.getByText("Recommended per remaining hour")).toBeInTheDocument();
+  expect(within(forecast.getByText("Confidence").parentElement!).getByText("Medium")).toBeInTheDocument();
+});
+
+it.each([
+  ["on_pace", "On pace"],
+  ["at_risk", "At risk"],
+  ["likely_to_exceed", "Likely to exceed"],
+  ["budget_exceeded", "Budget exceeded"],
+  ["incomplete_data", "Incomplete data"],
+  ["no_budget", "No budget configured"],
+  ["not_enough_elapsed_time", "Not enough elapsed time"]
+] as const)("labels forecast status %s as %s", (status, label) => {
+  renderGuardrails({ forecast: { status } });
+  expect(forecastSection().getByText(label)).toBeInTheDocument();
+});
+
+it.each([
+  ["partial", "≥700", "≥70.0%"],
+  ["estimated", "≈700", "≈70.0%"],
+  ["exact", "700", "70.0%"]
+] as const)("formats %s forecast quality", (quality, projectedTotal, projectedPercent) => {
+  renderGuardrails({ forecast: { quality } });
+  const forecast = forecastSection();
+  expect(within(forecast.getByText("Projected total").parentElement!).getByText(projectedTotal)).toBeInTheDocument();
+  expect(within(forecast.getByText("Projected budget usage").parentElement!).getByText(projectedPercent)).toBeInTheDocument();
+});
+
+it("marks remaining budget and allowance as upper bounds for partial usage", () => {
+  renderGuardrails({
+    partial: true,
+    forecast: { quality: "partial" }
+  });
+
+  expect(within(screen.getByText("Remaining").parentElement!).getByText("≤200")).toBeInTheDocument();
+  expect(
+    within(forecastSection().getByText("Recommended per remaining hour").parentElement!)
+      .getByText("≤25")
+  ).toBeInTheDocument();
+});
+
+it("uses a daily hour allowance and a weekly or monthly day allowance", () => {
+  const view = renderGuardrails();
+  expect(forecastSection().getByText("Recommended per remaining hour")).toBeInTheDocument();
+
+  view.rerender(
+    <UsageGuardrails
+      {...view.props}
+      granularity="weekly"
+      forecast={{ ...view.props.forecast, allowanceUnit: "day", recommendedAllowance: 400 }}
+    />
+  );
+  const forecast = forecastSection();
+  expect(forecast.getByText("Recommended per remaining day")).toBeInTheDocument();
+  expect(within(forecast.getByText("Recommended per remaining day").parentElement!).getByText("400")).toBeInTheDocument();
+});
+
+it("uses em dashes for unavailable no-budget values", () => {
+  renderGuardrails({
+    budget: 0,
+    forecast: {
+      status: "no_budget",
+      projectedBudgetPercent: null,
+      remainingBudget: null,
+      recommendedAllowance: null
+    }
+  });
+  const forecast = forecastSection();
+  expect(forecast.getByText("No budget configured")).toBeInTheDocument();
+  expect(within(forecast.getByText("Projected budget usage").parentElement!).getByText("—")).toBeInTheDocument();
+  expect(within(forecast.getByText("Recommended per remaining hour").parentElement!).getByText("—")).toBeInTheDocument();
+});
+
+it("explains an unavailable projection before enough time has elapsed", () => {
+  renderGuardrails({
+    forecast: {
+      status: "not_enough_elapsed_time",
+      projectedTotal: null,
+      projectedBudgetPercent: null,
+      confidence: null
+    }
+  });
+  const forecast = forecastSection();
+  expect(
+    within(forecast.getByText("Projected total").parentElement!).getByText("Not enough elapsed time")
+  ).toBeInTheDocument();
+  expect(within(forecast.getByText("Confidence").parentElement!).getByText("—")).toBeInTheDocument();
 });
 
 it("shows lower-bound budget usage, contributor paths, and heavy turn evidence", () => {

@@ -53,6 +53,7 @@ const SCHEMA = `
     source TEXT NOT NULL,
     source_session_id TEXT NOT NULL,
     source_turn_id TEXT NOT NULL,
+    execution_scope TEXT NOT NULL DEFAULT 'main',
     timestamp TEXT NOT NULL,
     model TEXT,
     provider TEXT,
@@ -84,6 +85,16 @@ const SCHEMA = `
     issues_json TEXT NOT NULL
   );
 `;
+
+function migrateSchema(database: Database): void {
+  const turnColumns = rows(database, "PRAGMA table_info(turns)")
+    .map((row) => String(row.name));
+  if (!turnColumns.includes("execution_scope")) {
+    database.run(
+      "ALTER TABLE turns ADD COLUMN execution_scope TEXT NOT NULL DEFAULT 'main'"
+    );
+  }
+}
 
 function exists(path: string): Promise<boolean> {
   return access(path).then(
@@ -135,6 +146,7 @@ export class TrackerStore {
     const SQL = await initSqlJs({ locateFile: () => options.wasmPath });
     const database = await TrackerStore.loadDatabase(SQL, options.databasePath);
     database.run(SCHEMA);
+    migrateSchema(database);
     return new TrackerStore(SQL, options, database);
   }
 
@@ -149,6 +161,7 @@ export class TrackerStore {
     this.database.close();
     this.database = await TrackerStore.loadDatabase(this.SQL, this.databasePath);
     this.database.run(SCHEMA);
+    migrateSchema(this.database);
   }
 
   private async acquireLock(): Promise<FileHandle> {
@@ -234,14 +247,15 @@ export class TrackerStore {
         for (const turn of result.turns) {
           this.database.run(
             `INSERT OR REPLACE INTO turns
-              (id, source, source_session_id, source_turn_id, timestamp, model, provider, project,
+              (id, source, source_session_id, source_turn_id, execution_scope, timestamp, model, provider, project,
                prompt, response, tool_event_count, fingerprint)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               turn.id,
               turn.source,
               turn.sourceSessionId,
               turn.sourceTurnId,
+              turn.executionScope,
               turn.timestamp,
               turn.model,
               turn.provider,
@@ -299,7 +313,7 @@ export class TrackerStore {
     await this.reload();
     return rows(
       this.database,
-      `SELECT id, source, source_session_id, source_turn_id, timestamp, model, provider, project,
+      `SELECT id, source, source_session_id, source_turn_id, execution_scope, timestamp, model, provider, project,
               prompt, response, tool_event_count, fingerprint
        FROM turns ORDER BY timestamp DESC, id`
     ).map((row) => ({
@@ -307,6 +321,8 @@ export class TrackerStore {
       source: row.source as Source,
       sourceSessionId: String(row.source_session_id),
       sourceTurnId: String(row.source_turn_id),
+      executionScope:
+        row.execution_scope === "subagent" ? "subagent" : "main",
       timestamp: String(row.timestamp),
       model: row.model == null ? null : String(row.model),
       provider: row.provider == null ? null : String(row.provider),
@@ -354,4 +370,3 @@ export class TrackerStore {
     });
   }
 }
-

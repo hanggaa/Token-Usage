@@ -27,6 +27,7 @@ const importResult: ImportResult = {
       source: "codex",
       sourceSessionId: "session",
       sourceTurnId: "turn",
+      executionScope: "main",
       timestamp: "2026-07-09T00:00:00.000Z",
       model: "gpt-5",
       provider: "openai",
@@ -89,4 +90,3 @@ describe("ImportCoordinator", () => {
     expect(scans).toBe(1);
   });
 });
-

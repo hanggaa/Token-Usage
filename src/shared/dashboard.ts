@@ -18,6 +18,31 @@ export interface UsageBudgets {
 
 export const ZERO_USAGE_BUDGETS: UsageBudgets = { daily: 0, weekly: 0, monthly: 0 };
 
+export type ForecastConfidence = "low" | "medium" | "high";
+
+export type ForecastStatus =
+  | "on_pace"
+  | "at_risk"
+  | "likely_to_exceed"
+  | "budget_exceeded"
+  | "incomplete_data"
+  | "no_budget"
+  | "not_enough_elapsed_time";
+
+export type ForecastQuality = "exact" | "estimated" | "partial";
+
+export interface UsageForecast {
+  projectedTotal: number | null;
+  projectedBudgetPercent: number | null;
+  remainingBudget: number | null;
+  recommendedAllowance: number | null;
+  allowanceUnit: "hour" | "day";
+  confidence: ForecastConfidence | null;
+  quality: ForecastQuality;
+  status: ForecastStatus;
+  elapsedRatio: number;
+}
+
 export interface RankedContributor {
   key: string;
   label: string;
@@ -59,6 +84,7 @@ export interface TrendPoint {
   endDate: string;
   inProgress: boolean;
   codex: number | null;
+  claude: number | null;
   opencode: number | null;
   antigravity: number | null;
   partialSources?: Source[];
@@ -73,6 +99,7 @@ export interface DashboardSnapshot {
   };
   trends: Record<UsageGranularity, TrendPoint[]>;
   budgets: UsageBudgets;
+  forecasts: Record<UsageGranularity, UsageForecast>;
   insights: Record<UsageGranularity, PeriodInsights>;
   turns: NormalizedTurn[];
   health: SourceHealth[];
@@ -94,4 +121,4 @@ export type BudgetResponse = Extract<
   { type: "budgetsSaved" | "budgetError" }
 >;
 
-export const SOURCES: Source[] = ["codex", "opencode", "antigravity"];
+export const SOURCES: Source[] = ["codex", "claude", "opencode", "antigravity"];

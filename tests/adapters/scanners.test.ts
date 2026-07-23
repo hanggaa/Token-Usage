@@ -7,6 +7,7 @@ import {
   AntigravityAdapter,
   parseLegacyAntigravitySteps
 } from "../../src/adapters/antigravity-source.js";
+import { ClaudeAdapter } from "../../src/adapters/claude-source.js";
 import { CodexAdapter } from "../../src/adapters/codex-source.js";
 import {
   OpenCodeAdapter,
@@ -99,9 +100,18 @@ describe("resolveSourcePaths", () => {
     const paths = resolveSourcePaths("/Users/dev");
 
     expect(paths.codex).toBe(join("/Users/dev", ".codex", "sessions"));
+    expect(paths.claude).toBe(join("/Users/dev", ".claude", "projects"));
     expect(paths.opencode).toBe(join("/Users/dev", ".local", "share", "opencode"));
     expect(paths.antigravityCurrent).toBe(join("/Users/dev", ".gemini", "antigravity-ide"));
     expect(paths.antigravityLegacy).toBe(join("/Users/dev", ".gemini", "antigravity"));
+  });
+
+  it("honors CLAUDE_CONFIG_DIR for Claude Code projects", () => {
+    const paths = resolveSourcePaths("/Users/dev", {
+      CLAUDE_CONFIG_DIR: "/Volumes/private/claude"
+    });
+
+    expect(paths.claude).toBe(join("/Volumes/private/claude", "projects"));
   });
 });
 
@@ -120,6 +130,69 @@ describe("source scanners", () => {
     expect(result.complete).toBe(true);
     expect(result.sessions).toHaveLength(1);
     expect(result.turns).toHaveLength(1);
+  });
+
+  it("scans Claude Code main and nested subagent transcripts without double counting", async () => {
+    const root = await temporaryRoot();
+    const project = join(root, "-Users-dev-project");
+    const subagents = join(project, "subagents");
+    await mkdir(subagents, { recursive: true });
+    const main = await readFile(resolve("tests/fixtures/claude-session.jsonl"), "utf8");
+    await writeFile(join(project, "main.jsonl"), main);
+    await writeFile(join(project, "main-copy.jsonl"), main);
+    await writeFile(
+      join(subagents, "agent-researcher.jsonl"),
+      await readFile(resolve("tests/fixtures/claude-subagent.jsonl"), "utf8")
+    );
+
+    const result = await new ClaudeAdapter(root).scan();
+
+    expect(result.complete).toBe(true);
+    expect(result.sessions).toHaveLength(2);
+    expect(result.turns).toHaveLength(3);
+    expect(result.turns.filter((turn) => turn.executionScope === "subagent")).toHaveLength(1);
+    expect(
+      result.turns
+        .flatMap((turn) => turn.metrics)
+        .filter((metric) => metric.kind === "total")
+        .reduce((sum, metric) => sum + (metric.value ?? 0), 0)
+    ).toBe(324);
+  });
+
+  it("reports malformed Claude JSONL without deleting successfully parsed usage", async () => {
+    const root = await temporaryRoot();
+    const project = join(root, "-Users-dev-project");
+    await mkdir(project, { recursive: true });
+    const fixture = await readFile(resolve("tests/fixtures/claude-session.jsonl"), "utf8");
+    await writeFile(join(project, "main.jsonl"), `${fixture}\n{broken`);
+
+    const result = await new ClaudeAdapter(root).scan();
+
+    expect(result.complete).toBe(false);
+    expect(result.turns).toHaveLength(2);
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        message: expect.stringContaining("1 malformed Claude Code JSONL line")
+      })
+    ]);
+  });
+
+  it("treats an empty Claude projects directory as a successful scan", async () => {
+    const root = await temporaryRoot();
+    const adapter = new ClaudeAdapter(root);
+
+    await expect(adapter.detect()).resolves.toMatchObject({
+      available: false,
+      detail: "No persisted Claude Code CLI sessions found"
+    });
+    await expect(adapter.scan()).resolves.toMatchObject({
+      source: "claude",
+      complete: true,
+      sessions: [],
+      turns: [],
+      issues: []
+    });
   });
 
   it("falls back to OpenCode list and export commands without a shell", async () => {

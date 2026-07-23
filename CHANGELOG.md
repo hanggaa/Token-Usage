@@ -1,5 +1,20 @@
 # Change Log
 
+## 0.6.0
+
+- Project the current Daily, Weekly, or Monthly period with a transparent linear forecast.
+- Compare projected usage with optional budgets through pace, risk, exceedance, and incomplete-data states.
+- Show remaining budget and a recommended allowance per remaining hour or day.
+- Label forecast confidence and preserve estimated (`≈`) and partial lower-bound (`≥`) accuracy treatments.
+- Calculate forecasts locally on demand without storing them or adding notifications and chart overlays.
+
+## 0.5.0
+
+- Import persisted Claude Code CLI transcripts as a fourth local usage source.
+- Include cache creation and cache reads in Claude request-input totals with conservative quality labels.
+- Import nested Claude Code subagent transcripts separately and mark their turns with a Subagent badge.
+- Deduplicate repeated Claude assistant messages and preserve existing databases with an automatic execution-scope migration.
+
 ## 0.4.0
 
 - Add optional Daily, Weekly, and Monthly token budgets with clear usage-status thresholds.

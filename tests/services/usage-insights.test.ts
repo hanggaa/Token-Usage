@@ -19,6 +19,7 @@ function turn(
     source,
     sourceSessionId: `session-${id}`,
     sourceTurnId: id,
+    executionScope: "main",
     timestamp: timestamp.toISOString(),
     model,
     provider: null,
@@ -56,6 +57,24 @@ it("ranks three contributors with unknown grouping, shares, and partial flags", 
   expect(insights.contributors.models[0].share).toBeCloseTo(0.6);
   expect(insights.contributors.models.some((item) => item.label === "Unknown")).toBe(true);
   expect(insights.contributors.projects.find((item) => item.label === "app")?.fullLabel).toBe("/work/app");
+});
+
+it("labels Claude Code as a source contributor", () => {
+  const insights = buildUsageInsights([
+    turn(
+      "claude",
+      new Date(2026, 6, 22, 9),
+      "claude",
+      "claude-sonnet-4",
+      "/work/app",
+      100,
+      "exact"
+    )
+  ], new Date(2026, 6, 22, 12)).daily;
+
+  expect(insights.contributors.sources).toEqual([
+    expect.objectContaining({ key: "claude", label: "Claude Code", tokens: 100 })
+  ]);
 });
 
 it("excludes numeric unavailable totals from period totals and contributors", () => {

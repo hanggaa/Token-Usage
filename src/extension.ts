@@ -3,6 +3,7 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 import { LocalAntigravityBridge } from "./adapters/antigravity-bridge.js";
 import { AntigravityAdapter } from "./adapters/antigravity-source.js";
+import { ClaudeAdapter } from "./adapters/claude-source.js";
 import { CodexAdapter } from "./adapters/codex-source.js";
 import { OpenCodeAdapter } from "./adapters/opencode-source.js";
 import { resolveSourcePaths } from "./adapters/paths.js";
@@ -47,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const configuration = vscode.workspace.getConfiguration("tokenUsage");
   const defaults = resolveSourcePaths(homedir());
   const codexRoot = configuredPath(configuration, "paths.codex", defaults.codex);
+  const claudeRoot = configuredPath(configuration, "paths.claude", defaults.claude);
   const openCodeRoot = configuredPath(configuration, "paths.opencode", defaults.opencode);
   const antigravityRoot = configuredPath(
     configuration,
@@ -64,6 +66,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   if (configuration.get<boolean>("sources.codex.enabled", true)) {
     adapters.push(new CodexAdapter(codexRoot));
+  }
+  if (configuration.get<boolean>("sources.claude.enabled", true)) {
+    adapters.push(new ClaudeAdapter(claudeRoot));
   }
   if (configuration.get<boolean>("sources.opencode.enabled", true)) {
     adapters.push(new OpenCodeAdapter(openCodeRoot, undefined, wasmPath));

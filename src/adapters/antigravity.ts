@@ -141,6 +141,7 @@ export function parseAntigravityTranscript(
       source: "antigravity",
       sourceSessionId: sessionId,
       sourceTurnId: pending.stepIndex,
+      executionScope: "main",
       timestamp: pending.timestamp,
       model: pending.model,
       provider: null,

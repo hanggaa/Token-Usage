@@ -1,8 +1,8 @@
 {
   "name": "token-usage-tracker",
   "displayName": "Token Usage Tracker",
-  "description": "Private, local token usage tracking for Codex CLI, OpenCode CLI, and Antigravity IDE.",
-  "version": "0.4.0",
+  "description": "Private, local token usage tracking for Codex CLI, Claude Code CLI, OpenCode CLI, and Antigravity IDE.",
+  "version": "0.6.0",
   "publisher": "hadii",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -20,6 +20,7 @@
   "keywords": [
     "tokens",
     "codex",
+    "claude",
     "opencode",
     "antigravity",
     "usage"
@@ -99,6 +100,11 @@
           "default": true,
           "description": "Import Codex CLI sessions."
         },
+        "tokenUsage.sources.claude.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Import Claude Code CLI sessions."
+        },
         "tokenUsage.sources.opencode.enabled": {
           "type": "boolean",
           "default": true,
@@ -113,6 +119,11 @@
           "type": "string",
           "default": "",
           "description": "Optional Codex data-root override."
+        },
+        "tokenUsage.paths.claude": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Claude Code projects-directory override."
         },
         "tokenUsage.paths.opencode": {
           "type": "string",

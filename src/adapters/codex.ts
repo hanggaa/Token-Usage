@@ -77,6 +77,7 @@ export function parseCodexSession(content: string, sourcePath: string): ParsedSe
       source: "codex",
       sourceSessionId: sessionId,
       sourceTurnId: pending.turnId,
+      executionScope: "main",
       timestamp: pending.timestamp,
       model: pending.model,
       provider,
@@ -162,4 +163,3 @@ export function parseCodexSession(content: string, sourcePath: string): ParsedSe
     turns
   };
 }
-
