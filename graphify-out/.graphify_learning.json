@@ -1,0 +1,86 @@
+{
+  "generated_at": "2026-07-22T06:05:25.198784+00:00",
+  "nodes": {
+    "package_properties_tokenusage_paths_opencode": {
+      "code_fingerprint": "9ca79b651af48a0551dc715e039eef1d738911ab6ec7e962911a73fcacd3968e",
+      "label": "tokenUsage.paths.opencode",
+      "last": "2026-07-22T06:03:25.665308+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-22T06:03:25.665308+00:00",
+          "outcome": "useful",
+          "q": "Why is the Opencode CLI in some device is marked Needs attention? in my windows device is Healthy but in my MacOS device is Needs attention"
+        }
+      ],
+      "score": 0.999968035,
+      "source_file": "package.json",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_adapters_opencode_source_opencodeadapter": {
+      "code_fingerprint": "3c89be2685b9b07725c57f9cec7fd753c981a4d926502a5f3c6e7f00b25eaa64",
+      "label": "OpenCodeAdapter",
+      "last": "2026-07-22T06:03:25.665308+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-22T06:03:25.665308+00:00",
+          "outcome": "useful",
+          "q": "Why is the Opencode CLI in some device is marked Needs attention? in my windows device is Healthy but in my MacOS device is Needs attention"
+        }
+      ],
+      "score": 0.999968035,
+      "source_file": "src/adapters/opencode-source.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_domain_types_importresult": {
+      "code_fingerprint": "0f6efe92ee5e0f8a5f161887b6fdeffde590a38707c3838363e73204f19730b9",
+      "label": "ImportResult",
+      "last": "2026-07-22T06:03:25.665308+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-22T06:03:25.665308+00:00",
+          "outcome": "useful",
+          "q": "Why is the Opencode CLI in some device is marked Needs attention? in my windows device is Healthy but in my MacOS device is Needs attention"
+        }
+      ],
+      "score": 0.999968035,
+      "source_file": "src/domain/types.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_domain_types_sourceavailability": {
+      "code_fingerprint": "0f6efe92ee5e0f8a5f161887b6fdeffde590a38707c3838363e73204f19730b9",
+      "label": "SourceAvailability",
+      "last": "2026-07-22T06:03:25.665308+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-22T06:03:25.665308+00:00",
+          "outcome": "useful",
+          "q": "Why is the Opencode CLI in some device is marked Needs attention? in my windows device is Healthy but in my MacOS device is Needs attention"
+        }
+      ],
+      "score": 0.999968035,
+      "source_file": "src/domain/types.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "src_storage_tracker_store_sourcehealth": {
+      "code_fingerprint": "ddc6fbd3f117c2dfb2bd631825e7cb5a908696f1c0bf4a553c1cf13db35222d7",
+      "label": "SourceHealth",
+      "last": "2026-07-22T06:03:25.665308+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-22T06:03:25.665308+00:00",
+          "outcome": "useful",
+          "q": "Why is the Opencode CLI in some device is marked Needs attention? in my windows device is Healthy but in my MacOS device is Needs attention"
+        }
+      ],
+      "score": 0.999968035,
+      "source_file": "src/storage/tracker-store.ts",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}
