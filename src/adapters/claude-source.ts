@@ -76,7 +76,7 @@ export class ClaudeAdapter implements SourceAdapter {
         if (malformed > 0) {
           issues.push({
             sourcePath: path,
-            severity: "error",
+            severity: "warning",
             message: `${malformed} malformed Claude Code JSONL ${
               malformed === 1 ? "line was" : "lines were"
             } ignored`

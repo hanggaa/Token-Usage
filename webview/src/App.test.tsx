@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedTurn } from "../../src/domain/types.js";
 import type {
   DashboardSnapshot,
+  PeriodComparison,
   PeriodInsights,
   UsageGranularity
 } from "../../src/shared/dashboard.js";
@@ -20,6 +21,51 @@ function emptyInsights(startDate: string, endDate: string): PeriodInsights {
     contributors: { sources: [], projects: [], models: [] },
     heavyTurns: [],
     hasComparableHistory: false
+  };
+}
+
+function comparison(
+  current: number,
+  previous: number,
+  currentStartDate: string,
+  previousStartDate: string
+): PeriodComparison {
+  const delta = current - previous;
+  return {
+    currentStartDate,
+    currentThrough: "2026-07-09T04:00:00.000Z",
+    previousStartDate,
+    previousThrough: "2026-07-08T04:00:00.000Z",
+    current: { tokens: current, quality: "exact" },
+    previous: { tokens: previous, quality: "exact" },
+    delta,
+    deltaPercent: previous > 0 ? (delta / previous) * 100 : null,
+    quality: "exact",
+    kind: previous === 0 && current > 0
+      ? "new"
+      : delta > 0
+        ? "increase"
+        : delta < 0
+          ? "decrease"
+          : "unchanged",
+    movers: {
+      sources: {
+        increases: [{
+          key: "codex",
+          label: "Codex",
+          current: { tokens: current, quality: "exact" },
+          previous: { tokens: previous, quality: "exact" },
+          delta,
+          deltaPercent: previous > 0 ? (delta / previous) * 100 : null,
+          quality: "exact",
+          kind: previous === 0 ? "new" : "increase"
+        }],
+        decreases: [],
+        omittedCount: 0
+      },
+      projects: { increases: [], decreases: [], omittedCount: 0 },
+      models: { increases: [], decreases: [], omittedCount: 0 }
+    }
   };
 }
 
@@ -114,6 +160,11 @@ const snapshot: DashboardSnapshot = {
     weekly: { ...emptyInsights("2026-07-13", "2026-07-19"), total: 200 },
     monthly: { ...emptyInsights("2026-08-01", "2026-08-31"), total: 3_000 }
   },
+  comparisons: {
+    daily: comparison(1_050, 700, "2026-07-09", "2026-07-08"),
+    weekly: comparison(5_250, 4_200, "2026-07-06", "2026-06-29"),
+    monthly: comparison(21_000, 18_000, "2026-07-01", "2026-06-01")
+  },
   turns: [
     fixtureTurn("codex-turn", "codex", "Refactor the authentication parser", 600),
     fixtureTurn("claude-subagent-turn", "claude", "Inspect the parser tests", 200),
@@ -152,12 +203,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderApp(initialGranularity: UsageGranularity = "daily") {
+function renderApp(
+  initialGranularity: UsageGranularity = "daily",
+  currentSnapshot: DashboardSnapshot = snapshot
+) {
   function Harness() {
     const [usageGranularity, setUsageGranularity] = useState(initialGranularity);
     return (
       <App
-        snapshot={snapshot}
+        snapshot={currentSnapshot}
         loading={false}
         onRefresh={() => undefined}
         usageGranularity={usageGranularity}
@@ -183,7 +237,37 @@ describe("App", () => {
     expect(within(todayCard!).getByText(/Lower bound:/u)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage Over Time" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Import Health" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Period Comparison" })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Token usage by turn" })).toBeInTheDocument();
+  });
+
+  it("shows successful Claude imports as healthy with expandable warnings", () => {
+    renderApp("daily", {
+      ...snapshot,
+      health: snapshot.health.map((health) =>
+        health.source === "claude"
+          ? {
+              ...health,
+              complete: false,
+              turnCount: 520,
+              issues: [{
+                sourcePath: "C:\\Users\\dev\\.claude\\projects\\session.jsonl",
+                severity: "warning",
+                message: "1 malformed Claude Code JSONL line was ignored"
+              }]
+            }
+          : health
+      )
+    });
+
+    const summary = screen.getByText("Healthy · 1 warning").closest("summary")!;
+    expect(summary).toBeInTheDocument();
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
+    expect(screen.getByText(/1 malformed Claude Code JSONL line was ignored/u))
+      .toBeInTheDocument();
+    expect(screen.getByText(/C:\\Users\\dev/u)).toBeInTheDocument();
   });
 
   it("filters rows by prompt search and source", () => {

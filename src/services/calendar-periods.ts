@@ -52,6 +52,14 @@ export function currentCalendarPeriod(
   return toCalendarPeriod(granularity, startOfPeriod(granularity, now));
 }
 
+export function previousCalendarPeriod(
+  granularity: UsageGranularity,
+  now = new Date()
+): CalendarPeriod {
+  const currentStart = startOfPeriod(granularity, now);
+  return toCalendarPeriod(granularity, shiftPeriod(granularity, currentStart, -1));
+}
+
 export function calendarPeriods(
   granularity: UsageGranularity,
   count: number,

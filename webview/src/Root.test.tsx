@@ -2,7 +2,11 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardSnapshot, PeriodInsights } from "../../src/shared/dashboard.js";
+import type {
+  DashboardSnapshot,
+  PeriodComparison,
+  PeriodInsights
+} from "../../src/shared/dashboard.js";
 import { Root, type VsCodeApi } from "./Root.js";
 
 function emptyInsights(startDate: string, endDate: string): PeriodInsights {
@@ -14,6 +18,29 @@ function emptyInsights(startDate: string, endDate: string): PeriodInsights {
     contributors: { sources: [], projects: [], models: [] },
     heavyTurns: [],
     hasComparableHistory: false
+  };
+}
+
+function emptyComparison(
+  currentStartDate: string,
+  previousStartDate: string
+): PeriodComparison {
+  return {
+    currentStartDate,
+    currentThrough: "2026-07-22T04:00:00.000Z",
+    previousStartDate,
+    previousThrough: "2026-07-21T04:00:00.000Z",
+    current: { tokens: 0, quality: "exact" },
+    previous: { tokens: 0, quality: "exact" },
+    delta: 0,
+    deltaPercent: null,
+    quality: "exact",
+    kind: "unchanged",
+    movers: {
+      sources: { increases: [], decreases: [], omittedCount: 0 },
+      projects: { increases: [], decreases: [], omittedCount: 0 },
+      models: { increases: [], decreases: [], omittedCount: 0 }
+    }
   };
 }
 
@@ -75,6 +102,11 @@ const snapshot: DashboardSnapshot = {
     daily: emptyInsights("2026-07-22", "2026-07-22"),
     weekly: emptyInsights("2026-07-20", "2026-07-26"),
     monthly: emptyInsights("2026-07-01", "2026-07-31")
+  },
+  comparisons: {
+    daily: emptyComparison("2026-07-22", "2026-07-21"),
+    weekly: emptyComparison("2026-07-20", "2026-07-13"),
+    monthly: emptyComparison("2026-07-01", "2026-06-01")
   },
   turns: [],
   health: []

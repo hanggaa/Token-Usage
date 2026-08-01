@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.7.0
+
+- Compare the active Daily, Weekly, or Monthly period with the same calendar position in the previous period.
+- Show overall change and the top three increases and decreases by source, project, or model.
+- Suppress unsafe deltas when either period contains partial lower-bound or unavailable usage.
+- Treat successfully imported Claude Code histories with ignored malformed JSONL lines as healthy with expandable warnings.
+- Clarify that refreshes import all locally persisted source history while dashboard charts use bounded display windows.
+
 ## 0.6.0
 
 - Project the current Daily, Weekly, or Monthly period with a transparent linear forecast.

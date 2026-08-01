@@ -414,6 +414,62 @@ tr:focus-visible {
   font-size: 10px;
 }
 
+.health-entry {
+  border-bottom: 1px solid var(--vscode-panel-border, #35383a);
+}
+
+.health-entry .health-row {
+  position: relative;
+  padding-left: 14px;
+  border-bottom: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.health-entry .health-row::-webkit-details-marker {
+  display: none;
+}
+
+.health-entry .health-row::before {
+  position: absolute;
+  left: 0;
+  color: var(--vscode-descriptionForeground, #999);
+  content: "›";
+}
+
+.health-entry[open] .health-row::before {
+  transform: rotate(90deg);
+}
+
+.health-issues {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 12px 12px 28px;
+  list-style: none;
+}
+
+.health-issues li {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  font-size: 9px;
+}
+
+.health-issues li > strong {
+  color: #e4a72b;
+  text-transform: capitalize;
+}
+
+.health-issues span,
+.health-issues code {
+  overflow-wrap: anywhere;
+}
+
+.health-issues code {
+  color: var(--vscode-descriptionForeground, #999);
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(740px, 2.4fr) minmax(330px, 1fr);
@@ -793,6 +849,133 @@ tbody tr.selected {
   background: var(--vscode-sideBar-background, #1c1e1f);
 }
 
+.comparison-panel {
+  margin-bottom: 9px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border, #35383a);
+  border-radius: 4px;
+  background: var(--vscode-sideBar-background, #1c1e1f);
+}
+
+.comparison-heading h2,
+.comparison-movers h3 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.comparison-heading p,
+.comparison-omitted {
+  margin: 4px 0 0;
+  color: var(--vscode-descriptionForeground, #999);
+  font-size: 10px;
+}
+
+.comparison-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.comparison-summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 12px;
+  background: var(--vscode-editor-background, #181a1b);
+}
+
+.comparison-summary span,
+.comparison-summary small,
+.comparison-movers small {
+  color: var(--vscode-descriptionForeground, #999);
+  font-size: 10px;
+}
+
+.comparison-summary strong {
+  overflow-wrap: anywhere;
+  font: 600 14px/1.2 var(--vscode-editor-font-family, monospace);
+}
+
+.comparison-breakdown {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vscode-panel-border, #35383a);
+}
+
+.comparison-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.comparison-tabs button {
+  padding: 5px 9px;
+  border: 1px solid var(--vscode-button-border, var(--vscode-panel-border, #45484a));
+  color: var(--vscode-foreground, #ddd);
+  background: transparent;
+}
+
+.comparison-tabs button[aria-pressed="true"] {
+  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-button-background, #0e639c);
+}
+
+.comparison-mover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.comparison-movers {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--vscode-panel-border, #35383a);
+}
+
+.comparison-movers ol {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comparison-movers li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
+}
+
+.comparison-movers li > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.comparison-movers li strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.comparison-movers li b {
+  flex: 0 0 auto;
+  font: 600 10px/1.2 var(--vscode-editor-font-family, monospace);
+}
+
+.comparison-up {
+  color: #e4a72b;
+}
+
+.comparison-down {
+  color: #77ce4b;
+}
+
 .guardrails-heading,
 .guardrail-budget,
 .budget-editor-actions,
@@ -947,6 +1130,9 @@ tbody tr.selected {
   .contributors-grid { grid-template-columns: minmax(0, 1fr); }
 
   .forecast-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .comparison-summary,
+  .comparison-mover-grid { grid-template-columns: minmax(0, 1fr); }
 
   .guardrails-heading { align-items: flex-start; }
 

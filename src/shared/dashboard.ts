@@ -79,6 +79,47 @@ export interface PeriodInsights {
   hasComparableHistory: boolean;
 }
 
+export type ComparisonQuality = "exact" | "estimated" | "partial" | "unavailable";
+
+export interface ComparisonUsage {
+  tokens: number | null;
+  quality: ComparisonQuality;
+}
+
+export interface ComparisonMover {
+  key: string;
+  label: string;
+  fullLabel?: string;
+  current: ComparisonUsage;
+  previous: ComparisonUsage;
+  delta: number;
+  deltaPercent: number | null;
+  quality: "exact" | "estimated";
+  kind: "increase" | "decrease" | "new" | "stopped";
+}
+
+export interface ComparisonMovers {
+  increases: ComparisonMover[];
+  decreases: ComparisonMover[];
+  omittedCount: number;
+}
+
+export type ComparisonDimension = "sources" | "projects" | "models";
+
+export interface PeriodComparison {
+  currentStartDate: string;
+  currentThrough: string;
+  previousStartDate: string;
+  previousThrough: string;
+  current: ComparisonUsage;
+  previous: ComparisonUsage;
+  delta: number | null;
+  deltaPercent: number | null;
+  quality: ComparisonQuality;
+  kind: "increase" | "decrease" | "unchanged" | "new" | "unavailable";
+  movers: Record<ComparisonDimension, ComparisonMovers>;
+}
+
 export interface TrendPoint {
   startDate: string;
   endDate: string;
@@ -101,6 +142,7 @@ export interface DashboardSnapshot {
   budgets: UsageBudgets;
   forecasts: Record<UsageGranularity, UsageForecast>;
   insights: Record<UsageGranularity, PeriodInsights>;
+  comparisons: Record<UsageGranularity, PeriodComparison>;
   turns: NormalizedTurn[];
   health: SourceHealth[];
 }

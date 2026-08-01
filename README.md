@@ -7,7 +7,7 @@ Token Usage Tracker is a private, local-first VS Code-compatible extension for u
 - OpenCode CLI
 - Antigravity IDE
 
-It imports persisted local histories into a local SQLite index, then presents summaries, calendar trends, budgets, contributors, unusually heavy turns, import health, and per-turn details in one dashboard. Usage data never leaves your machine.
+It imports persisted local histories into a local SQLite index, then presents summaries, calendar trends, budgets, period comparisons, contributors, unusually heavy turns, import health, and per-turn details in one dashboard. Usage data never leaves your machine.
 
 ## Dashboard
 
@@ -18,21 +18,23 @@ It imports persisted local histories into a local SQLite index, then presents su
 - Set optional Daily, Monday-Sunday Weekly, and calendar-month token budgets.
 - See the current period's projected usage, budget pace, remaining budget, recommended allowance, and forecast confidence.
 - See the top source, project, and model contributors for the selected period.
+- Compare the current period with the same elapsed calendar position in the previous period.
+- Inspect the top three usage increases and decreases by source, project, or model.
 - Find unusually heavy turns relative to your own recent local history.
-- Filter turns by source and measurement quality, inspect individual turns, and monitor Import Health.
+- Filter turns by source and measurement quality, inspect individual turns, and expand Import Health warnings.
 
 The dashboard separates the text you typed from the full request context and marks every metric as exact, estimated, partial lower bound, or unavailable.
 
-## What's new in 0.6.0
+## What's new in 0.7.0
 
-- Understand where the current Daily, Weekly, or Monthly period is heading with a transparent linear usage projection.
-- Compare projected usage with an optional budget through **On pace**, **At risk**, **Likely to exceed**, **Budget exceeded**, and conservative **Incomplete data** states.
-- See the allowance available for each remaining hour in Daily view or each remaining day in Weekly and Monthly views.
-- Judge early projections with Low, Medium, or High confidence and the tracker's existing exact, estimated (`≈`), and partial lower-bound (`≥`) treatments.
+- Compare today through the current time with yesterday through the same time, the current Monday-Sunday week with the previous week through the same weekday/time, or the current month with the previous month through the same calendar position.
+- See overall change and switch one breakdown between Source, Project, and Model movers.
+- Review the top three increases and decreases while partial or unavailable contributors are clearly omitted from unsafe rankings.
+- Keep successfully imported Claude Code history healthy when malformed JSONL lines are ignored, with warning counts and expandable local diagnostics.
 
 Budgets and insights are informational. They do not interrupt, throttle, or block any source tool.
 
-Version 0.6.0 does not add notifications or forecast overlays to the historical Usage Over Time chart.
+Version 0.7.0 does not add cost tracking, notifications, arbitrary date ranges, or comparison chart overlays.
 
 ## Privacy
 
@@ -63,6 +65,12 @@ Antigravity does not expose authoritative Gemini usage metadata in its local tra
 
 Partial lower-bound totals are included in summaries and insights as known minimums. Unavailable values are excluded rather than treated as zero.
 
+### Period comparison behavior
+
+Period Comparison follows the active Daily, Weekly, or Monthly selector. It compares usage through the current local time with the same calendar position in the immediately previous period. For unequal month lengths, the previous cutoff is capped at that calendar month's end.
+
+Exact comparisons show signed token and percentage changes. Comparisons containing estimates display `≈`. When either total is a partial lower bound or unavailable, both period totals remain visible but the tracker suppresses the signed and percentage delta because subtracting incomplete values is not reliable. Partial or unavailable contributors are likewise omitted from the top-three mover rankings and counted in an explanatory note.
+
 ### Forecast behavior
 
 Usage Pace & Forecast applies only to the current active Daily, Weekly, or Monthly calendar period. It linearly projects the current known usage over the complete period, so the calculation remains transparent and does not use historical weighting. Forecasts are calculated on demand and are never stored in SQLite.
@@ -81,7 +89,7 @@ When a budget is configured, Daily view recommends an allowance per remaining ho
 
 ## Install
 
-1. Build or download `token-usage-tracker-0.6.0.vsix`.
+1. Build or download `token-usage-tracker-0.7.0.vsix`.
 2. In VS Code or Antigravity, open **Extensions**.
 3. Choose **Install from VSIX...** and select the package.
 4. Open **Token Usage** from the Activity Bar or run **Token Usage: Open Dashboard** from the command palette.
@@ -91,7 +99,7 @@ When a budget is configured, Daily view recommends an allowance per remaining ho
 You can also install the package from a terminal:
 
 ```sh
-code --install-extension token-usage-tracker-0.6.0.vsix
+code --install-extension token-usage-tracker-0.7.0.vsix
 ```
 
 The VSIX is platform-neutral. The extension includes Windows and macOS source-path discovery, including OpenCode CLI installations managed through NVM on macOS.
@@ -101,6 +109,8 @@ The VSIX is platform-neutral. The extension includes Windows and macOS source-pa
 Background imports are disabled by default. The source tools retain their own histories, so **Token Usage: Refresh Now** safely catches up whenever you want updated numbers without continuously scanning while you work.
 
 To opt into automatic imports, enable `tokenUsage.backgroundRefresh.enabled`. The default interval is 30 minutes and can be changed with `tokenUsage.refreshIntervalMinutes`. Recursive source-file watchers are not used.
+
+Each refresh scans all history still persisted by the enabled source tools; the tracker does not apply a one-year import cutoff. **All Time** and the turn table use every imported turn. The Usage Over Time chart displays the latest 14 days, 12 calendar weeks, or 12 calendar months. Source-tool retention settings may remove older histories before the tracker can import them.
 
 ## Settings
 
@@ -134,7 +144,7 @@ Claude Code defaults to `${CLAUDE_CONFIG_DIR}/projects` when `CLAUDE_CONFIG_DIR`
 - **Token Usage: Show Import Diagnostics**
 - **Token Usage: Delete All Tracker Data**
 
-Use **Show Import Diagnostics** when a source reports **Needs attention**. Use **Rebuild Local Index** when you intentionally want to re-import all persisted source histories; routine upgrades do not require it.
+Import Health shows **Healthy · N warnings** when usable history was preserved despite recoverable issues. Expand the source row to inspect its local path and message. Use **Show Import Diagnostics** for the complete output log when a source reports **Needs attention**. Use **Rebuild Local Index** when you intentionally want to re-import all persisted source histories; routine upgrades do not require it.
 
 ## Development
 

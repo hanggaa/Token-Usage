@@ -92,6 +92,15 @@ describe("buildDashboardSnapshot", () => {
       total: 250,
       partial: false
     });
+    expect(snapshot.comparisons.daily).toMatchObject({
+      currentStartDate: "2026-07-22",
+      previousStartDate: "2026-07-21",
+      current: { tokens: 250, quality: "exact" },
+      previous: { tokens: 0, quality: "exact" },
+      delta: 250,
+      deltaPercent: null,
+      kind: "new"
+    });
   });
 
   it("builds today, seven-day, and all-time exact/estimated summaries", () => {

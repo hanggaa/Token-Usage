@@ -172,7 +172,7 @@ describe("source scanners", () => {
     expect(result.turns).toHaveLength(2);
     expect(result.issues).toEqual([
       expect.objectContaining({
-        severity: "error",
+        severity: "warning",
         message: expect.stringContaining("1 malformed Claude Code JSONL line")
       })
     ]);

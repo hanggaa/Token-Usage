@@ -145,6 +145,80 @@ function makeInsights(startDate, endDate, total) {
   };
 }
 
+function makeComparison(
+  currentStartDate,
+  currentThrough,
+  previousStartDate,
+  previousThrough,
+  currentTokens,
+  previousTokens
+) {
+  const delta = currentTokens - previousTokens;
+  const usage = (tokens, quality = "exact") => ({ tokens, quality });
+  const mover = (key, label, previous, current, quality = "exact", fullLabel) => {
+    const itemDelta = current - previous;
+    return {
+      key,
+      label,
+      ...(fullLabel ? { fullLabel } : {}),
+      current: usage(current, quality),
+      previous: usage(previous),
+      delta: itemDelta,
+      deltaPercent: previous > 0 ? (itemDelta / previous) * 100 : null,
+      quality,
+      kind:
+        previous === 0
+          ? "new"
+          : current === 0
+            ? "stopped"
+            : itemDelta > 0
+              ? "increase"
+              : "decrease"
+    };
+  };
+  return {
+    currentStartDate,
+    currentThrough,
+    previousStartDate,
+    previousThrough,
+    current: usage(currentTokens, "estimated"),
+    previous: usage(previousTokens),
+    delta,
+    deltaPercent: previousTokens > 0 ? (delta / previousTokens) * 100 : null,
+    quality: "estimated",
+    kind: delta > 0 ? "increase" : delta < 0 ? "decrease" : "unchanged",
+    movers: {
+      sources: {
+        increases: [
+          mover("codex", "Codex", 3_100_000, 4_050_000, "estimated"),
+          mover("claude", "Claude Code", 2_650_000, 3_100_000)
+        ],
+        decreases: [mover("opencode", "OpenCode", 2_150_000, 1_500_000)],
+        omittedCount: 1
+      },
+      projects: {
+        increases: [
+          mover(
+            "/Users/demo/work/token-usage",
+            "token-usage",
+            2_400_000,
+            3_500_000,
+            "estimated",
+            "/Users/demo/work/token-usage"
+          )
+        ],
+        decreases: [mover("/Users/demo/work/notes", "notes", 1_700_000, 1_200_000)],
+        omittedCount: 1
+      },
+      models: {
+        increases: [mover("gpt-5", "gpt-5", 2_900_000, 3_800_000, "estimated")],
+        decreases: [mover("claude-sonnet", "claude-sonnet", 2_200_000, 1_750_000)],
+        omittedCount: 1
+      }
+    }
+  };
+}
+
 const snapshot = {
   generatedAt: new Date(2026, 6, 9, 11, 24, 30).toISOString(),
   summaries: {
@@ -242,9 +316,46 @@ const snapshot = {
     weekly: makeInsights("2026-07-06", "2026-07-12", 8_650_000),
     monthly: makeInsights("2026-07-01", "2026-07-31", 31_800_000)
   },
+  comparisons: {
+    daily: makeComparison(
+      "2026-07-09",
+      new Date(2026, 6, 9, 11, 24, 30).toISOString(),
+      "2026-07-08",
+      new Date(2026, 6, 8, 11, 24, 30).toISOString(),
+      1_842_357,
+      1_495_200
+    ),
+    weekly: makeComparison(
+      "2026-07-06",
+      new Date(2026, 6, 9, 11, 24, 30).toISOString(),
+      "2026-06-29",
+      new Date(2026, 6, 2, 11, 24, 30).toISOString(),
+      8_650_000,
+      7_900_000
+    ),
+    monthly: makeComparison(
+      "2026-07-01",
+      new Date(2026, 6, 9, 11, 24, 30).toISOString(),
+      "2026-06-01",
+      new Date(2026, 5, 9, 11, 24, 30).toISOString(),
+      31_800_000,
+      28_950_000
+    )
+  },
   health: [
     { source: "codex", complete: true, completedAt: new Date().toISOString(), sessionCount: 12, turnCount: 64, issues: [] },
-    { source: "claude", complete: true, completedAt: new Date().toISOString(), sessionCount: 8, turnCount: 36, issues: [] },
+    {
+      source: "claude",
+      complete: false,
+      completedAt: new Date().toISOString(),
+      sessionCount: 60,
+      turnCount: 520,
+      issues: [{
+        sourcePath: "C:\\Users\\demo\\.claude\\projects\\session.jsonl",
+        severity: "warning",
+        message: "1 malformed Claude Code JSONL line was ignored"
+      }]
+    },
     { source: "opencode", complete: true, completedAt: new Date().toISOString(), sessionCount: 9, turnCount: 48, issues: [] },
     {
       source: "antigravity",
@@ -294,6 +405,10 @@ try {
   await page.getByText("Confidence", { exact: true }).waitFor();
   await page.getByText("Medium", { exact: true }).waitFor();
   await page.getByText("Approaching limit", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Period Comparison" }).waitFor();
+  await page.getByText("Top increases", { exact: true }).waitFor();
+  await page.getByText("Top decreases", { exact: true }).waitFor();
+  await page.getByText("Healthy · 1 warning", { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "Edit budgets" }).click();
   const budgetEditor = page.locator(".budget-editor");
   await budgetEditor.getByLabel("Daily", { exact: true }).waitFor();

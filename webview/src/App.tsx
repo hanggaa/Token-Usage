@@ -26,6 +26,8 @@ import {
   type UsageGranularity,
   type UsageSummary
 } from "../../src/shared/dashboard.js";
+import { classifyImportHealth } from "../../src/shared/import-health.js";
+import { PeriodComparison } from "./PeriodComparison.js";
 import { UsageGuardrails, type BudgetSaveState } from "./UsageGuardrails.js";
 import "./styles.css";
 
@@ -293,9 +295,6 @@ function TrendChart({
 
 function ImportHealth({ snapshot }: { snapshot: DashboardSnapshot }) {
   const bySource = new Map(snapshot.health.map((health) => [health.source, health]));
-  const antigravity = bySource.get("antigravity");
-  const legacyIssues =
-    antigravity?.issues.filter((issue) => /legacy|language server/iu.test(issue.message)) ?? [];
   return (
     <section className="panel health-panel">
       <header className="panel-heading">
@@ -304,32 +303,51 @@ function ImportHealth({ snapshot }: { snapshot: DashboardSnapshot }) {
       <div className="health-list">
         {SOURCES.map((source) => {
           const health = bySource.get(source);
-          const healthy =
-            health?.complete === true ||
-            (source === "antigravity" &&
-              (health?.turnCount ?? 0) > 0 &&
-              legacyIssues.length === health?.issues.length);
-          return (
-            <div className="health-row" key={source}>
+          const state = classifyImportHealth(health);
+          const healthy = state === "healthy" || state === "healthy_with_warnings";
+          const status =
+            state === "not_scanned"
+              ? "Not scanned"
+              : state === "needs_attention"
+                ? "Needs attention"
+                : state === "healthy_with_warnings"
+                  ? `Healthy · ${health!.issues.length} ${
+                      health!.issues.length === 1 ? "warning" : "warnings"
+                    }`
+                  : "Healthy";
+          const row = (
+            <>
               <span>
                 <i className={`health-dot ${healthy ? "healthy" : "warning"}`} />
                 {SOURCE_LABELS[source]} {source === "antigravity" ? "IDE" : "CLI"}
               </span>
               <strong className={healthy ? "healthy-text" : "warning-text"}>
-                {health ? (healthy ? "Healthy" : "Needs attention") : "Not scanned"}
+                {status}
               </strong>
+            </>
+          );
+          if (health && health.issues.length > 0) {
+            return (
+              <details className="health-entry" key={source}>
+                <summary className="health-row">{row}</summary>
+                <ul className="health-issues">
+                  {health.issues.map((issue, index) => (
+                    <li key={`${issue.sourcePath}:${index}`}>
+                      <strong>{issue.severity}</strong>
+                      <span>{issue.message}</span>
+                      <code>{issue.sourcePath}</code>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            );
+          }
+          return (
+            <div className="health-row" key={source}>
+              {row}
             </div>
           );
         })}
-        {legacyIssues.length > 0 ? (
-          <div className="health-row">
-            <span>
-              <i className="health-dot warning" />
-              Legacy Session Import
-            </span>
-            <strong className="warning-text">Unavailable</strong>
-          </div>
-        ) : null}
       </div>
       <p className="health-note">
         {snapshot.health.reduce((sum, health) => sum + health.issues.length, 0)} import issues
@@ -542,6 +560,11 @@ export function App({
         saveError={budgetSaveError}
         onSave={onSaveBudgets}
         onSaveSettled={onBudgetSaveSettled}
+      />
+
+      <PeriodComparison
+        granularity={usageGranularity}
+        comparison={snapshot.comparisons[usageGranularity]}
       />
 
       <section className={`workspace ${selected ? "" : "detail-closed"}`}>

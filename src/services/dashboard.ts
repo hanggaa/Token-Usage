@@ -20,6 +20,7 @@ import {
 } from "./calendar-periods.js";
 import { buildUsageInsights } from "./usage-insights.js";
 import { buildUsageForecasts } from "./usage-forecast.js";
+import { buildUsageComparisons } from "./usage-comparison.js";
 
 interface SourceAccumulator {
   value: number;
@@ -126,6 +127,7 @@ export function buildDashboardSnapshot(
     budgets,
     forecasts: buildUsageForecasts(turns, budgets, now),
     insights: buildUsageInsights(turns, now),
+    comparisons: buildUsageComparisons(turns, now),
     turns,
     health
   };
