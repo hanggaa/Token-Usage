@@ -154,6 +154,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           for (const issue of result.issues) {
             output.appendLine(`  ${issue.severity}: ${issue.sourcePath}: ${issue.message}`);
           }
+          for (const diagnostic of result.diagnostics ?? []) {
+            output.appendLine(`  info: ${diagnostic}`);
+          }
         }
         await publishSnapshot();
       } catch (error) {

@@ -77,6 +77,7 @@ export interface ImportResult {
   seenSessionIds: string[];
   issues: ImportIssue[];
   checkpoint: SourceCheckpoint;
+  diagnostics?: string[];
 }
 
 export interface SourceAdapter {

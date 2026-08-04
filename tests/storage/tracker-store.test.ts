@@ -196,6 +196,21 @@ describe("TrackerStore", () => {
     expect(await store.getTurns()).toHaveLength(0);
   });
 
+  it("removes a previously indexed IDE duplicate after a complete reconciled scan", async () => {
+    const store = await createStore();
+    await store.applyImport(fixtureImport("antigravity", "shared"));
+    await store.applyImport({
+      ...fixtureImport("antigravity", "ide-only"),
+      sessions: [fixtureImport("antigravity", "ide-only").sessions[0]],
+      turns: [fixtureImport("antigravity", "ide-only").turns[0]],
+      seenSessionIds: ["ide-only"]
+    });
+
+    expect((await store.getTurns()).map((turn) => turn.sourceSessionId)).toEqual([
+      "ide-only"
+    ]);
+  });
+
   it("reloads under the write lock so two IDE instances do not overwrite each other", async () => {
     const first = await createStore("shared.sqlite");
     const databasePath = first.databasePath;
