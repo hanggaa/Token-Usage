@@ -26,16 +26,17 @@ It imports persisted local histories into a local SQLite index, then presents su
 
 The dashboard separates the text you typed from the full request context and marks every metric as exact, estimated, partial lower bound, or unavailable.
 
-## What's new in 0.7.0
+## What's new in 0.8.0
 
-- Compare today through the current time with yesterday through the same time, the current Monday-Sunday week with the previous week through the same weekday/time, or the current month with the previous month through the same calendar position.
-- See overall change and switch one breakdown between Source, Project, and Model movers.
-- Review the top three increases and decreases while partial or unavailable contributors are clearly omitted from unsafe rankings.
-- Keep successfully imported Claude Code history healthy when malformed JSONL lines are ignored, with warning counts and expandable local diagnostics.
+- Import Antigravity CLI conversation databases as a separate source from Antigravity IDE.
+- Include committed active-WAL history through a validated, read-only in-memory SQLite snapshot.
+- Report recorded input, output, cache, and reasoning usage exactly when available, with honest partial, estimated, or unavailable fallbacks.
+- Count shared CLI/IDE conversations once, preferring only a fully parsed CLI copy while preserving incomplete prior history safely.
+- Show independent Antigravity CLI health, filters, contributors, comparisons, and chart segments throughout the dashboard.
 
 Budgets and insights are informational. They do not interrupt, throttle, or block any source tool.
 
-Version 0.7.0 does not add cost tracking, notifications, arbitrary date ranges, or comparison chart overlays.
+Version 0.8.0 does not add cost tracking, notifications, arbitrary date ranges, or comparison chart overlays.
 
 ## Privacy
 
@@ -94,7 +95,7 @@ When a budget is configured, Daily view recommends an allowance per remaining ho
 
 ## Install
 
-1. Build or download `token-usage-tracker-0.7.0.vsix`.
+1. Build or download `token-usage-tracker-0.8.0.vsix`.
 2. In VS Code or Antigravity, open **Extensions**.
 3. Choose **Install from VSIX...** and select the package.
 4. Open **Token Usage** from the Activity Bar or run **Token Usage: Open Dashboard** from the command palette.
@@ -104,7 +105,7 @@ When a budget is configured, Daily view recommends an allowance per remaining ho
 You can also install the package from a terminal:
 
 ```sh
-code --install-extension token-usage-tracker-0.7.0.vsix
+code --install-extension token-usage-tracker-0.8.0.vsix
 ```
 
 The VSIX is platform-neutral. The extension includes Windows and macOS source-path discovery, including OpenCode CLI installations managed through NVM on macOS.

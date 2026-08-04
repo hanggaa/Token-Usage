@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.8.0
+
+- Import Antigravity CLI conversation databases independently from Antigravity IDE.
+- Include committed active-WAL history through a validated, read-only in-memory SQLite snapshot.
+- Preserve exact recorded input, output, cache, and reasoning usage with explicit partial, estimated, and unavailable fallbacks.
+- Deduplicate shared CLI/IDE conversations only when the CLI copy is fully parsed.
+- Retain previously indexed turns safely during incomplete imports and support normal SQLite WAL reset/reuse behavior.
+- Show independent Antigravity CLI health, filters, contributors, comparisons, and chart segments across the dashboard.
+
 ## 0.7.0
 
 - Compare the active Daily, Weekly, or Monthly period with the same calendar position in the previous period.
