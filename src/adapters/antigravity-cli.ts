@@ -9,6 +9,7 @@ import {
   type ParsedSession
 } from "./shared.js";
 import {
+  antigravityCliToolEvent,
   decodeAntigravityCliStep,
   type AntigravityCliUsage
 } from "./antigravity-cli-protobuf.js";
@@ -43,18 +44,19 @@ export interface AntigravityCliParseIssue {
 interface PendingTurn {
   stepIndex: number;
   turnId: string;
-  timestamp: string;
+  timestamp: string | null;
   prompt: string;
   responses: string[];
   usages: AntigravityCliUsage[];
   model: string | null;
   provider: string | null;
+  toolEventCount: number;
+  observationComplete: boolean;
 }
 
 const DONE_STATUS = 3;
 const USER_INPUT_STEP = 14;
 const PLANNER_RESPONSE_STEP = 15;
-const EPOCH = new Date(0).toISOString();
 const MAXIMUM_SAFE_TOKENS = BigInt(Number.MAX_SAFE_INTEGER);
 
 interface MetricResult {
@@ -97,7 +99,10 @@ function exactMetric(
   };
 }
 
-function exactMetrics(usages: AntigravityCliUsage[]): MetricResult {
+function exactMetrics(
+  usages: AntigravityCliUsage[],
+  observationComplete: boolean
+): MetricResult {
   const requestInput = sumUsage(
     usages,
     (usage) => [usage.inputTokens, usage.cacheReadTokens, usage.cacheWriteTokens]
@@ -129,7 +134,16 @@ function exactMetrics(usages: AntigravityCliUsage[]): MetricResult {
     )
   ];
   return {
-    metrics: results.map((result) => result.metric),
+    metrics: results.map((result) => {
+      if (observationComplete || result.metric.value == null) {
+        return result.metric;
+      }
+      return {
+        ...result.metric,
+        quality: "partial" as const,
+        basis: `lower bound from ${result.metric.basis}; one or more in-turn rows were unreadable`
+      };
+    }),
     issues: results
       .map((result) => result.issue)
       .filter((issue): issue is string => issue != null)
@@ -141,31 +155,28 @@ function estimatedMetrics(
   response: string,
   model: string | null
 ): TokenMetric[] {
-  if (!prompt.trim() && !response.trim()) {
-    return [
-      unavailable("request_input", "No visible Antigravity CLI request context"),
-      unavailable("cached_input", "Antigravity CLI cache usage was not recorded"),
-      unavailable("output", "No visible Antigravity CLI output"),
-      unavailable("reasoning_output", "Antigravity CLI reasoning usage was not recorded")
-    ];
-  }
-
-  const visibleInput = estimateTypedInput(prompt, model);
-  const visibleOutput = estimateTypedInput(response, model);
+  const hasPrompt = prompt.trim().length > 0;
+  const hasResponse = response.trim().length > 0;
+  const visibleInput = hasPrompt ? estimateTypedInput(prompt, model) : null;
+  const visibleOutput = hasResponse ? estimateTypedInput(response, model) : null;
   return [
-    {
-      kind: "request_input",
-      value: visibleInput.value,
-      quality: "partial",
-      basis: "lower bound from visible prompt; hidden and injected context excluded"
-    },
+    visibleInput
+      ? {
+          kind: "request_input",
+          value: visibleInput.value,
+          quality: "partial",
+          basis: "lower bound from visible prompt; hidden and injected context excluded"
+        }
+      : unavailable("request_input", "No visible Antigravity CLI request context"),
     unavailable("cached_input", "Antigravity CLI cache usage was not recorded"),
-    {
-      kind: "output",
-      value: visibleOutput.value,
-      quality: "estimated",
-      basis: "visible response; UTF-8 bytes ÷ 4 heuristic"
-    },
+    visibleOutput
+      ? {
+          kind: "output",
+          value: visibleOutput.value,
+          quality: "estimated",
+          basis: "visible response; UTF-8 bytes ÷ 4 heuristic"
+        }
+      : unavailable("output", "No visible Antigravity CLI output"),
     unavailable("reasoning_output", "Antigravity CLI reasoning usage was not recorded")
   ];
 }
@@ -192,7 +203,7 @@ function turnMetrics(pending: PendingTurn): MetricResult {
   const response = pending.responses.join("\n\n");
   const metrics: TokenMetric[] = [estimateTypedInput(pending.prompt, pending.model)];
   const result = pending.usages.length > 0
-    ? exactMetrics(pending.usages)
+    ? exactMetrics(pending.usages, pending.observationComplete)
     : { metrics: estimatedMetrics(pending.prompt, response, pending.model), issues: [] };
   metrics.push(...result.metrics);
   const total = totalMetric(metrics);
@@ -216,6 +227,14 @@ export function parseAntigravityCliConversation(
       return;
     }
     const response = pending.responses.join("\n\n");
+    if (pending.timestamp == null) {
+      issues.push({
+        idx: pending.stepIndex,
+        message: "Antigravity CLI turn has no persisted timestamp and was skipped"
+      });
+      pending = null;
+      return;
+    }
     if (pending.usages.length === 0) {
       usedEstimatedFallback = true;
     }
@@ -237,7 +256,7 @@ export function parseAntigravityCliConversation(
       project: input.project,
       prompt: pending.prompt,
       response,
-      toolEventCount: 0,
+      toolEventCount: pending.toolEventCount,
       metrics: metricResult.metrics,
       fingerprint: ""
     };
@@ -259,6 +278,15 @@ export function parseAntigravityCliConversation(
     try {
       step = decodeAntigravityCliStep(row);
     } catch (error) {
+      if (
+        pending
+        && (
+          row.stepType === PLANNER_RESPONSE_STEP
+          || antigravityCliToolEvent(row.stepType) != null
+        )
+      ) {
+        pending.observationComplete = false;
+      }
       issues.push({
         idx: row.idx,
         message: error instanceof Error ? error.message : String(error)
@@ -273,12 +301,14 @@ export function parseAntigravityCliConversation(
       pending = {
         stepIndex: step.idx,
         turnId: String(step.idx),
-        timestamp: step.timestamp ?? EPOCH,
+        timestamp: step.timestamp,
         prompt: step.prompt?.trim() ?? "",
         responses: [],
         usages: [...step.usages],
         model: step.model,
-        provider: step.provider
+        provider: step.provider,
+        toolEventCount: 0,
+        observationComplete: true
       };
       continue;
     }
@@ -286,9 +316,13 @@ export function parseAntigravityCliConversation(
     if (!pending) {
       continue;
     }
+    pending.timestamp ??= step.timestamp;
     pending.usages.push(...step.usages);
     pending.model ??= step.model;
     pending.provider ??= step.provider;
+    if (step.toolEvent) {
+      pending.toolEventCount += 1;
+    }
     if (step.stepType === PLANNER_RESPONSE_STEP && step.response?.trim()) {
       pending.responses.push(step.response.trim());
     }

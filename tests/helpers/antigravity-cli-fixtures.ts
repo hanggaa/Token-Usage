@@ -106,6 +106,23 @@ export function userStep(
   return step(idx, 14, 3, stepMetadata, 19, stringField(2, prompt));
 }
 
+export function userStepWithoutTimestamp(
+  idx: number,
+  prompt: string
+): AntigravityCliStepRow {
+  const stepMetadata = metadata(undefined, []);
+  return step(idx, 14, 3, stepMetadata, 19, stringField(2, prompt));
+}
+
+export function completedStep(
+  idx: number,
+  stepType: number,
+  timestampValue?: string
+): AntigravityCliStepRow {
+  const stepMetadata = metadata(timestampValue, []);
+  return step(idx, stepType, 3, stepMetadata, 21, new Uint8Array());
+}
+
 export function plannerStep(
   idx: number,
   response: string,

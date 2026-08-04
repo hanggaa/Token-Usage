@@ -75,6 +75,7 @@ export interface ImportResult {
   sessions: NormalizedSession[];
   turns: NormalizedTurn[];
   seenSessionIds: string[];
+  fullyObservedSessionIds?: string[];
   issues: ImportIssue[];
   checkpoint: SourceCheckpoint;
   diagnostics?: string[];

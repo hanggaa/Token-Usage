@@ -1,5 +1,5 @@
 import { access, readdir } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import initSqlJs, { type Database } from "sql.js";
 import type {
   ImportResult,
@@ -78,6 +78,16 @@ function requiredString(value: unknown, field: string): string {
   return value;
 }
 
+function conversationId(value: unknown, sourcePath: string): string {
+  if (value == null || (typeof value === "string" && !value.trim())) {
+    return basename(sourcePath, extname(sourcePath));
+  }
+  if (typeof value !== "string") {
+    throw new Error("Invalid cascade_id value in Antigravity CLI database");
+  }
+  return value.trim();
+}
+
 function nullableString(value: unknown, field: string): string | null {
   if (value === null) return null;
   if (typeof value !== "string") {
@@ -116,7 +126,8 @@ function projectFromWorkspaceUris(value: string | null): string | null {
 }
 
 function readConversation(
-  database: Database
+  database: Database,
+  sourcePath: string
 ): { conversationId: string; rows: AntigravityCliStepRow[] } {
   requireTable(database, "trajectory_meta");
   requireTable(database, "steps");
@@ -131,7 +142,7 @@ LIMIT 1`
   }
   const metadata = metadataRows[0];
   requiredString(metadata.trajectory_id, "trajectory_id");
-  const conversationId = requiredString(metadata.cascade_id, "cascade_id");
+  const canonicalConversationId = conversationId(metadata.cascade_id, sourcePath);
   requiredInteger(metadata.trajectory_type, "trajectory_type");
   requiredInteger(metadata.source, "source");
   const rows = queryRows(
@@ -146,7 +157,7 @@ ORDER BY idx`
     metadata: requiredBlob(row.metadata, "steps.metadata"),
     stepPayload: requiredBlob(row.step_payload, "steps.step_payload")
   }));
-  return { conversationId, rows };
+  return { conversationId: canonicalConversationId, rows };
 }
 
 function findSummaryTable(database: Database): string {
@@ -234,14 +245,20 @@ export class AntigravityCliAdapter implements SourceAdapter {
     try {
       paths = await conversationPaths(this.dataRoot);
     } catch (error) {
-      return importResult("antigravity-cli", [], [], [{
-        sourcePath: join(this.dataRoot, "conversations"),
-        severity: "error",
-        message: message(error)
-      }], false);
+      return {
+        ...importResult("antigravity-cli", [], [], [{
+          sourcePath: join(this.dataRoot, "conversations"),
+          severity: "error",
+          message: message(error)
+        }], false),
+        fullyObservedSessionIds: []
+      };
     }
     if (paths.length === 0) {
-      return importResult("antigravity-cli", [], [], [], true);
+      return {
+        ...importResult("antigravity-cli", [], [], [], true),
+        fullyObservedSessionIds: []
+      };
     }
 
     const SQL = await initSqlJs({
@@ -251,6 +268,7 @@ export class AntigravityCliAdapter implements SourceAdapter {
     const sessions: ImportResult["sessions"] = [];
     const turns: ImportResult["turns"] = [];
     const issues: ImportResult["issues"] = [];
+    const fullyObservedSessionIds: string[] = [];
     const summaryPath = join(this.dataRoot, "conversation_summaries.db");
     let summaries = new Map<string, ConversationSummary>();
     try {
@@ -277,7 +295,7 @@ export class AntigravityCliAdapter implements SourceAdapter {
         const database = new SQL.Database(await this.readSnapshot(path));
         let conversation;
         try {
-          conversation = readConversation(database);
+          conversation = readConversation(database, path);
         } finally {
           database.close();
         }
@@ -294,6 +312,9 @@ export class AntigravityCliAdapter implements SourceAdapter {
         turns.push(...parsed.turns);
         if (parsed.usedEstimatedFallback) estimatedSessions += 1;
         if (parsed.issues.length > 0) complete = false;
+        if (parsed.issues.length === 0) {
+          fullyObservedSessionIds.push(parsed.session.sourceSessionId);
+        }
         issues.push(...parsed.issues.map((issue) => ({
           sourcePath: path,
           severity: "error" as const,
@@ -317,6 +338,9 @@ export class AntigravityCliAdapter implements SourceAdapter {
         } used visible-content estimates because recorded usage was absent`
       });
     }
-    return importResult("antigravity-cli", sessions, turns, issues, complete);
+    return {
+      ...importResult("antigravity-cli", sessions, turns, issues, complete),
+      fullyObservedSessionIds
+    };
   }
 }

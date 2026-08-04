@@ -11,6 +11,8 @@ import type { AntigravityCliStepRow } from "./antigravity-cli.js";
 const DONE_STATUS = 3;
 const USER_INPUT_STEP = 14;
 const PLANNER_RESPONSE_STEP = 15;
+const VIEW_FILE_STEP = 8;
+const LIST_DIRECTORY_STEP = 9;
 const STEP_METADATA_FIELD = 5;
 const USER_INPUT_PAYLOAD_FIELD = 19;
 const PLANNER_RESPONSE_PAYLOAD_FIELD = 20;
@@ -41,9 +43,12 @@ export interface DecodedAntigravityCliStep {
   prompt: string | null;
   response: string | null;
   usages: AntigravityCliUsage[];
+  toolEvent: AntigravityCliToolEvent | null;
   model: string | null;
   provider: string | null;
 }
+
+export type AntigravityCliToolEvent = "view-file" | "list-directory";
 
 function safeNumber(value: bigint, field: string): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -100,6 +105,14 @@ function providerName(code: number | null): string | null {
 }
 
 function modelName(_code: number | null): string | null {
+  return null;
+}
+
+export function antigravityCliToolEvent(
+  stepType: number
+): AntigravityCliToolEvent | null {
+  if (stepType === VIEW_FILE_STEP) return "view-file";
+  if (stepType === LIST_DIRECTORY_STEP) return "list-directory";
   return null;
 }
 
@@ -187,6 +200,7 @@ export function decodeAntigravityCliStep(
     prompt,
     response,
     usages,
+    toolEvent: antigravityCliToolEvent(encodedStepType),
     model: modelName(generatorModelCode ?? usageModelCode),
     provider
   };

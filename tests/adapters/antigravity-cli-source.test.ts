@@ -23,7 +23,7 @@ async function temporaryRoot(): Promise<string> {
 }
 
 async function conversationDatabase(
-  cascadeId: string,
+  cascadeId: string | Uint8Array | null,
   rows: AntigravityCliStepRow[]
 ): Promise<Uint8Array> {
   const SQL = await initSqlJs({
@@ -38,7 +38,7 @@ async function conversationDatabase(
   );
   database.run(
     "INSERT INTO trajectory_meta VALUES (?, ?, ?, ?)",
-    [`trajectory-${cascadeId}`, cascadeId, 4, 17]
+    ["trajectory-fixture", cascadeId, 4, 17]
   );
   for (const row of rows) {
     database.run(
@@ -125,6 +125,7 @@ describe("AntigravityCliAdapter", () => {
 
     expect(calls).toEqual([readablePath, failedPath]);
     expect(result.complete).toBe(false);
+    expect(result.fullyObservedSessionIds).toEqual(["cascade-1"]);
     expect(result.sessions).toHaveLength(1);
     expect(result.sessions[0]).toMatchObject({
       source: "antigravity-cli",
@@ -239,6 +240,101 @@ describe("AntigravityCliAdapter", () => {
     ]);
   });
 
+  it("falls back to each database filename when the cascade ID is absent or blank", async () => {
+    const root = await temporaryRoot();
+    const nullPath = await discoveredDatabase(root, "null-cascade.db");
+    const blankPath = await discoveredDatabase(root, "blank-cascade.db");
+    const snapshots = new Map<string, Uint8Array>([
+      [nullPath, await conversationDatabase(null, [
+        userStep(0, "Null cascade.", "2026-08-04T06:00:00.000Z"),
+        plannerStep(1, "Imported.", { inputTokens: 3, outputTokens: 2 })
+      ])],
+      [blankPath, await conversationDatabase("   ", [
+        userStep(0, "Blank cascade.", "2026-08-04T06:05:00.000Z"),
+        plannerStep(1, "Imported.", { inputTokens: 4, outputTokens: 2 })
+      ])]
+    ]);
+
+    const result = await new AntigravityCliAdapter(
+      root,
+      undefined,
+      async (path) => snapshots.get(path) ?? Promise.reject(new Error(`Missing ${path}`))
+    ).scan();
+
+    expect(result.sessions.map((session) => session.sourceSessionId).toSorted()).toEqual([
+      "blank-cascade",
+      "null-cascade"
+    ]);
+    expect(result.fullyObservedSessionIds?.toSorted()).toEqual([
+      "blank-cascade",
+      "null-cascade"
+    ]);
+    expect(result.complete).toBe(true);
+  });
+
+  it("rejects a present non-string cascade ID instead of using the filename", async () => {
+    const root = await temporaryRoot();
+    const conversationPath = await discoveredDatabase(root, "numeric-cascade.db");
+    const bytes = await conversationDatabase(Uint8Array.from([0x34, 0x32]), [
+      userStep(0, "Do not import this.", "2026-08-04T06:10:00.000Z")
+    ]);
+
+    const result = await new AntigravityCliAdapter(
+      root,
+      undefined,
+      async () => bytes
+    ).scan();
+
+    expect(result).toMatchObject({
+      complete: false,
+      sessions: [],
+      turns: [],
+      fullyObservedSessionIds: []
+    });
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        sourcePath: conversationPath,
+        severity: "error",
+        message: expect.stringMatching(/cascade_id/i)
+      })
+    ]);
+  });
+
+  it("keeps valid observable data but withholds authority after a malformed step", async () => {
+    const root = await temporaryRoot();
+    const conversationPath = await discoveredDatabase(root, "partial.db");
+    const malformedPlanner: AntigravityCliStepRow = {
+      ...plannerStepWithoutUsage(1, "Unreadable."),
+      stepPayload: Uint8Array.from([0xa2, 0x01, 0x05, 0x61])
+    };
+    const bytes = await conversationDatabase("cascade-partial", [
+      userStep(0, "Retain this turn.", "2026-08-04T06:15:00.000Z"),
+      malformedPlanner,
+      plannerStep(2, "Visible result.", { inputTokens: 8, outputTokens: 3 })
+    ]);
+
+    const result = await new AntigravityCliAdapter(
+      root,
+      undefined,
+      async () => bytes
+    ).scan();
+
+    expect(result.complete).toBe(false);
+    expect(result.sessions).toHaveLength(1);
+    expect(result.turns).toHaveLength(1);
+    expect(result.turns[0].metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "total", value: 11, quality: "partial" })
+    ]));
+    expect(result.fullyObservedSessionIds).toEqual([]);
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        sourcePath: conversationPath,
+        severity: "error",
+        message: expect.stringMatching(/Step 1:.*protobuf/i)
+      })
+    ]);
+  });
+
   it("treats a missing conversations directory as healthy no-history", async () => {
     const root = await temporaryRoot();
     const adapter = new AntigravityCliAdapter(root);
@@ -253,6 +349,7 @@ describe("AntigravityCliAdapter", () => {
       complete: true,
       sessions: [],
       turns: [],
+      fullyObservedSessionIds: [],
       issues: []
     });
   });

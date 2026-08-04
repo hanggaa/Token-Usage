@@ -54,6 +54,24 @@ describe("decodeProtobufMessage", () => {
     expect(() => decodeProtobufMessage(Uint8Array.from([0x08, 0x01]), 1)).toThrow();
   });
 
+  it("decodes a complete fixed64 field", () => {
+    const fixed64 = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+
+    expect(decodeProtobufMessage(field(7, 1, fixed64))).toEqual([
+      { number: 7, wireType: 1, value: fixed64 }
+    ]);
+  });
+
+  it("rejects a terminating tenth varint byte greater than one", () => {
+    const outOfRangeUint64 = Uint8Array.from([
+      0x08,
+      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+      0x02
+    ]);
+
+    expect(() => decodeProtobufMessage(outOfRangeUint64)).toThrow(/varint|uint64/i);
+  });
+
   it("reports the byte offset for unsupported wire types", () => {
     expect(() => decodeProtobufMessage(Uint8Array.from([0x0b]))).toThrow("byte offset 0");
   });

@@ -24,6 +24,9 @@ function readVarint(bytes: Uint8Array, offset: number): VarintResult {
 
     const byte = bytes[offset];
     offset += 1;
+    if (index === 9 && byte > 0x01) {
+      throw new Error(`Protobuf varint exceeds uint64 at byte offset ${offset - 10}`);
+    }
     value |= BigInt(byte & 0x7f) << BigInt(index * 7);
 
     if ((byte & 0x80) === 0) {

@@ -8,11 +8,13 @@ import {
   type AntigravityCliStepRow
 } from "../../src/adapters/antigravity-cli.js";
 import {
+  completedStep,
   plannerStep,
   plannerStepWithOriginalResponse,
   plannerStepWithUsages,
   plannerStepWithoutUsage,
   userStep,
+  userStepWithoutTimestamp,
   withUnknownField
 } from "../helpers/antigravity-cli-fixtures.js";
 
@@ -208,7 +210,7 @@ describe("parseAntigravityCliConversation", () => {
     expect(metricsByKind(parsed).total).toMatchObject({ value: 14, quality: "exact" });
   });
 
-  it("isolates malformed required payloads without losing valid rows", () => {
+  it("downgrades surviving usage after a malformed in-turn planner row", () => {
     const malformedPlanner: AntigravityCliStepRow = {
       ...plannerStepWithoutUsage(1, "ignored"),
       stepPayload: Uint8Array.from([0xa2, 0x01, 0x05, 0x61])
@@ -225,11 +227,135 @@ describe("parseAntigravityCliConversation", () => {
 
     expect(parsed.turns).toHaveLength(1);
     expect(parsed.turns[0].response).toBe("Recovered.");
-    expect(metricsByKind(parsed).total).toMatchObject({ value: 15, quality: "exact" });
+    expect(metricsByKind(parsed)).toMatchObject({
+      request_input: { value: 12, quality: "partial" },
+      output: { value: 3, quality: "partial" },
+      total: { value: 15, quality: "partial" }
+    });
     expect(parsed.issues).toEqual([
       expect.objectContaining({ idx: 1, message: expect.stringContaining("protobuf") })
     ]);
     expect(() => decodeAntigravityCliStep(malformedPlanner)).toThrow();
+  });
+
+  it("counts only evidenced view-file and list-directory tool steps", () => {
+    const viewFile = completedStep(1, 8);
+    const listDirectory = completedStep(2, 9);
+    const checkpoint = completedStep(3, 10);
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "Inspect the project.", "2026-08-04T07:30:00.000Z"),
+      viewFile,
+      listDirectory,
+      checkpoint,
+      plannerStep(4, "Inspection complete.", {
+        inputTokens: 12,
+        outputTokens: 3,
+        provider: 24
+      })
+    ]));
+
+    expect(decodeAntigravityCliStep(viewFile).toolEvent).toBe("view-file");
+    expect(decodeAntigravityCliStep(listDirectory).toolEvent).toBe("list-directory");
+    expect(decodeAntigravityCliStep(checkpoint).toolEvent).toBeNull();
+    expect(parsed.turns[0].toolEventCount).toBe(2);
+  });
+
+  it("downgrades surviving usage after a malformed known tool row", () => {
+    const malformedTool: AntigravityCliStepRow = {
+      ...completedStep(2, 8),
+      stepPayload: Uint8Array.from([0xaa, 0x01, 0x05, 0x61])
+    };
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "Inspect safely.", "2026-08-04T07:35:00.000Z"),
+      plannerStep(1, "Partial inspection.", {
+        inputTokens: 9,
+        outputTokens: 3,
+        provider: 24
+      }),
+      malformedTool
+    ]));
+
+    expect(metricsByKind(parsed).total).toMatchObject({
+      value: 12,
+      quality: "partial"
+    });
+    expect(parsed.turns[0].toolEventCount).toBe(0);
+    expect(parsed.issues).toEqual([
+      expect.objectContaining({ idx: 2, message: expect.stringContaining("protobuf") })
+    ]);
+  });
+
+  it.each([1016, 1050])(
+    "preserves unsupported model code %i without inventing a readable name",
+    (model) => {
+      const planner = plannerStep(1, "Done.", {
+        inputTokens: 4,
+        outputTokens: 2,
+        model,
+        provider: 24
+      });
+      const decoded = decodeAntigravityCliStep(planner);
+      const parsed = parseAntigravityCliConversation(conversation([
+        userStep(0, "Use the persisted model code.", "2026-08-04T07:45:00.000Z"),
+        planner
+      ]));
+
+      expect(decoded.usages[0].modelCode).toBe(model);
+      expect(decoded.model).toBeNull();
+      expect(parsed.turns[0].model).toBeNull();
+    }
+  );
+
+  it("keeps request input unavailable when only a response is visible", () => {
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "", "2026-08-04T07:50:00.000Z"),
+      plannerStepWithoutUsage(1, "Visible response.")
+    ]));
+
+    expect(metricsByKind(parsed)).toMatchObject({
+      request_input: { value: null, quality: "unavailable" },
+      output: { value: 5, quality: "estimated" },
+      total: { value: null, quality: "unavailable" }
+    });
+  });
+
+  it("keeps output unavailable when only a prompt is visible", () => {
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "Visible prompt.", "2026-08-04T07:55:00.000Z"),
+      plannerStepWithoutUsage(1, "")
+    ]));
+
+    expect(metricsByKind(parsed)).toMatchObject({
+      request_input: { value: 4, quality: "partial" },
+      output: { value: null, quality: "unavailable" },
+      total: { value: null, quality: "unavailable" }
+    });
+  });
+
+  it("uses a later persisted step timestamp when the user timestamp is absent", () => {
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStepWithoutTimestamp(0, "Use the later timestamp."),
+      plannerStepWithoutUsage(1, "Done.", "2026-08-04T08:05:00.000Z")
+    ]));
+
+    expect(parsed.turns[0].timestamp).toBe("2026-08-04T08:05:00.000Z");
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it("skips a turn with no persisted timestamp instead of inventing epoch", () => {
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStepWithoutTimestamp(0, "No timestamp."),
+      plannerStepWithoutUsage(1, "Still no timestamp.")
+    ]));
+
+    expect(parsed.turns).toEqual([]);
+    expect(parsed.session).toMatchObject({ startedAt: null, updatedAt: null });
+    expect(parsed.issues).toEqual([
+      expect.objectContaining({
+        idx: 0,
+        message: expect.stringMatching(/persisted timestamp.*skipped/i)
+      })
+    ]);
   });
 
   it("marks cross-record aggregate overflow unavailable instead of throwing", () => {
