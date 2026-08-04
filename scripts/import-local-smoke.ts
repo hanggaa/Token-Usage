@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { LocalAntigravityBridge } from "../src/adapters/antigravity-bridge.js";
+import { AntigravityCliAdapter } from "../src/adapters/antigravity-cli-source.js";
 import { AntigravityAdapter } from "../src/adapters/antigravity-source.js";
 import { CodexAdapter } from "../src/adapters/codex-source.js";
 import { OpenCodeAdapter } from "../src/adapters/opencode-source.js";
@@ -21,6 +22,7 @@ try {
     [
       new CodexAdapter(paths.codex),
       new OpenCodeAdapter(paths.opencode),
+      new AntigravityCliAdapter(paths.antigravityCli),
       new AntigravityAdapter(
         paths.antigravityCurrent,
         paths.antigravityLegacy,
@@ -30,6 +32,12 @@ try {
     store
   );
   const results = await coordinator.refresh("full");
+  const antigravityCliResult = results.find((result) => result.source === "antigravity-cli");
+  const totalTokens = (quality: "exact" | "estimated") =>
+    (antigravityCliResult?.turns ?? []).reduce((sum, turn) => {
+      const total = turn.metrics.find((metric) => metric.kind === "total");
+      return total?.quality === quality && total.value != null ? sum + total.value : sum;
+    }, 0);
   const turns = await store.getTurns();
   const antigravityTurns = turns.filter((turn) => turn.source === "antigravity");
   const newestAntigravityTurn = antigravityTurns.toSorted((left, right) =>
@@ -46,6 +54,13 @@ try {
           issues: result.issues.length
         })),
         indexedTurns: turns.length,
+        antigravityCli: {
+          sessions: antigravityCliResult?.sessions.length ?? 0,
+          turns: antigravityCliResult?.turns.length ?? 0,
+          exactTotalTokens: totalTokens("exact"),
+          estimatedTotalTokens: totalTokens("estimated"),
+          diagnostics: antigravityCliResult?.diagnostics ?? []
+        },
         antigravitySanitization: {
           wrappedPrompts: antigravityTurns.filter((turn) =>
             /<(?:USER_REQUEST|ADDITIONAL_METADATA|USER_SETTINGS_CHANGE)>/i.test(turn.prompt)

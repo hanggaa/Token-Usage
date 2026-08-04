@@ -5,6 +5,7 @@ Token Usage Tracker is a private, local-first VS Code-compatible extension for u
 - Codex CLI
 - Claude Code CLI
 - OpenCode CLI
+- Antigravity CLI
 - Antigravity IDE
 
 It imports persisted local histories into a local SQLite index, then presents summaries, calendar trends, budgets, period comparisons, contributors, unusually heavy turns, import health, and per-turn details in one dashboard. Usage data never leaves your machine.
@@ -42,6 +43,7 @@ Version 0.7.0 does not add cost tracking, notifications, arbitrary date ranges, 
 - No telemetry, cloud synchronization, or external network requests.
 - Source histories are read-only.
 - Authentication files are never read.
+- Antigravity CLI conversation databases at `~/.gemini/antigravity-cli/conversations/*.db` are read-only; committed active-WAL data is included through an in-memory snapshot without changing the source database.
 - Claude tool inputs and tool-result payloads are counted as events but are not retained in the tracker.
 - Budgets, insights, and forecasts are calculated locally.
 - Full project paths are retained only as local metadata; contributor cards display shortened project labels.
@@ -55,6 +57,7 @@ Version 0.7.0 does not add cost tracking, notifications, arbitrary date ranges, 
 | Codex | Exact when reported in session JSONL | Offline estimate |
 | Claude Code | Exact from assistant usage when input, cache creation, cache read, and output components are all reported; otherwise a partial lower bound | Offline estimate |
 | OpenCode | Exact from exported message usage | Offline estimate |
+| Antigravity CLI | Exact for recorded request input, output, cache, and reasoning data when present; older sessions with missing metadata use labeled visible-content estimates, partial lower bounds, or unavailable values | Offline estimate from visible user text |
 | Antigravity | Cumulative visible request context is a `≥` lower bound; visible output and exposed thinking are estimated; cache remains unavailable | Offline estimate from cleaned `<USER_REQUEST>` text |
 
 Cached-input and reasoning-output values are shown separately and are not double-counted in totals.
@@ -62,6 +65,8 @@ Cached-input and reasoning-output values are shown separately and are not double
 Claude Code reasoning output remains unavailable as a separate metric because local transcripts do not report a distinct reasoning-token value. Nested `subagents/agent-*.jsonl` histories are imported separately, but their usage remains part of the same dashboard summaries, charts, budgets, and insights. If Claude Code session persistence is disabled, or older histories have been removed by Claude Code retention settings, those sessions cannot be imported.
 
 Antigravity does not expose authoritative Gemini usage metadata in its local transcripts. Its lower bounds include observable prompt metadata, conversation history, tool calls, and tool results across model calls, but exclude unknown system context and caching.
+
+When Antigravity CLI and IDE history share the same cascade ID, the tracker counts that conversation once and keeps the successfully parsed Antigravity CLI copy because it carries recorded usage. A CLI file that cannot be parsed does not suppress its IDE copy.
 
 Partial lower-bound totals are included in summaries and insights as known minimums. Unavailable values are excluded rather than treated as zero.
 
@@ -119,10 +124,12 @@ Each refresh scans all history still persisted by the enabled source tools; the 
 | `tokenUsage.sources.codex.enabled` | `true` | Import Codex CLI sessions. |
 | `tokenUsage.sources.claude.enabled` | `true` | Import Claude Code CLI sessions. |
 | `tokenUsage.sources.opencode.enabled` | `true` | Import OpenCode CLI sessions. |
+| `tokenUsage.sources.antigravityCli.enabled` | `true` | Import Antigravity CLI sessions. |
 | `tokenUsage.sources.antigravity.enabled` | `true` | Import Antigravity IDE sessions. |
 | `tokenUsage.paths.codex` | Empty | Optional Codex data-root override. |
 | `tokenUsage.paths.claude` | Empty | Optional Claude Code projects-directory override. |
 | `tokenUsage.paths.opencode` | Empty | Optional OpenCode data-root override. |
+| `tokenUsage.paths.antigravityCli` | Empty | Optional Antigravity CLI data-root override. |
 | `tokenUsage.paths.antigravity` | Empty | Optional Antigravity data-root override. |
 | `tokenUsage.storagePath` | Empty | Optional shared tracker-database path override. |
 | `tokenUsage.backgroundRefresh.enabled` | `false` | Run full source-history imports in the background. |
@@ -144,7 +151,7 @@ Claude Code defaults to `${CLAUDE_CONFIG_DIR}/projects` when `CLAUDE_CONFIG_DIR`
 - **Token Usage: Show Import Diagnostics**
 - **Token Usage: Delete All Tracker Data**
 
-Import Health shows **Healthy · N warnings** when usable history was preserved despite recoverable issues. Expand the source row to inspect its local path and message. Use **Show Import Diagnostics** for the complete output log when a source reports **Needs attention**. Use **Rebuild Local Index** when you intentionally want to re-import all persisted source histories; routine upgrades do not require it.
+Import Health shows **Healthy · N warnings** when usable history was preserved despite recoverable issues. Expand the source row to inspect its local path and message. Use **Show Import Diagnostics** for the complete output log when a source reports **Needs attention**. For a file-specific Antigravity CLI result, note the affected `conversations/*.db`, leave the source files untouched, and retry **Refresh Now** after the file stops changing; other readable sessions remain indexed and previously retained data is preserved when a file cannot be safely observed. Use **Rebuild Local Index** when you intentionally want to re-import all persisted source histories; routine upgrades do not require it.
 
 ## Development
 
@@ -173,7 +180,7 @@ node scripts/visual-qa.mjs
 
 | Path | Responsibility |
 | --- | --- |
-| `src/adapters/` | Discover and import Codex, Claude Code, OpenCode, and Antigravity histories. |
+| `src/adapters/` | Discover and import Codex, Claude Code, OpenCode, Antigravity CLI, and Antigravity IDE histories. |
 | `src/services/` | Coordinate imports and calculate dashboard periods, budgets, and insights. |
 | `src/storage/` | Maintain the local SQLite-backed tracker index. |
 | `src/webview/` | Connect the VS Code extension host to the dashboard. |
