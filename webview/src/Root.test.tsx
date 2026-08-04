@@ -53,13 +53,13 @@ const snapshot: DashboardSnapshot = {
   },
   trends: {
     daily: [
-      { startDate: "2026-07-22", endDate: "2026-07-22", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0, "antigravity-cli": 0 }
+      { startDate: "2026-07-22", endDate: "2026-07-22", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 100, "antigravity-cli": 250, partialSources: ["antigravity"] }
     ],
     weekly: [
-      { startDate: "2026-07-20", endDate: "2026-07-26", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0, "antigravity-cli": 0 }
+      { startDate: "2026-07-20", endDate: "2026-07-26", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 700, "antigravity-cli": 1_750, partialSources: ["antigravity"] }
     ],
     monthly: [
-      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0, "antigravity-cli": 0 }
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 3_000, "antigravity-cli": 7_500, partialSources: ["antigravity"] }
     ]
   },
   budgets: { daily: 0, weekly: 0, monthly: 0 },
@@ -136,6 +136,21 @@ afterEach(() => {
 });
 
 describe("Root", () => {
+  it("renders a non-zero Antigravity CLI segment from a delivered snapshot", () => {
+    const vscode = fakeVsCode(null);
+    const { container } = render(<Root vscode={vscode} />);
+
+    deliver({ type: "snapshot", snapshot });
+
+    const trend = within(screen.getByRole("heading", { name: "Usage Over Time" }).closest("section")!);
+    expect(trend.getByText("Antigravity IDE")).toBeInTheDocument();
+    expect(trend.getByText("Antigravity CLI")).toBeInTheDocument();
+    const segment = container.querySelector<HTMLElement>(
+      ".chart-column.in-progress .bar-segment.source-antigravity-cli"
+    )!;
+    expect(Number.parseFloat(segment.style.height)).toBeGreaterThan(0);
+  });
+
   it("restores Monthly, persists Weekly, and does not refresh for a selector change", () => {
     const vscode = fakeVsCode({ usageGranularity: "monthly" });
     render(<Root vscode={vscode} />);

@@ -75,6 +75,8 @@ function fixtureTurn(
   prompt: string,
   total: number
 ): NormalizedTurn {
+  const antigravityFamily = source === "antigravity" || source === "antigravity-cli";
+  const recordedQuality = source === "antigravity" ? "partial" : "exact";
   return {
     id,
     source,
@@ -82,8 +84,12 @@ function fixtureTurn(
     sourceTurnId: id,
     executionScope: source === "claude" && id.includes("subagent") ? "subagent" : "main",
     timestamp: "2026-07-09T03:00:00.000Z",
-    model: source === "claude" ? "claude-sonnet-4" : source === "antigravity" ? "gemini-3-pro" : "gpt-5",
-    provider: source === "claude" ? "anthropic" : source === "antigravity" ? "google" : "openai",
+    model: source === "claude"
+      ? "claude-sonnet-4"
+      : antigravityFamily
+        ? "gemini-3-pro"
+        : "gpt-5",
+    provider: source === "claude" ? "anthropic" : antigravityFamily ? "google" : "openai",
     project: source === "claude" || source === "opencode" ? "/project/api" : "/project/web",
     prompt,
     response: `Response for ${prompt}`,
@@ -91,9 +97,9 @@ function fixtureTurn(
     fingerprint: id,
     metrics: [
       { kind: "typed_input", value: 12, quality: "estimated", basis: "fixture" },
-      { kind: "request_input", value: total - 20, quality: "exact", basis: "fixture" },
-      { kind: "output", value: 20, quality: "exact", basis: "fixture" },
-      { kind: "total", value: total, quality: "exact", basis: "fixture" }
+      { kind: "request_input", value: total - 20, quality: recordedQuality, basis: "fixture" },
+      { kind: "output", value: 20, quality: recordedQuality, basis: "fixture" },
+      { kind: "total", value: total, quality: recordedQuality, basis: "fixture" }
     ]
   };
 }
@@ -107,16 +113,16 @@ const snapshot: DashboardSnapshot = {
   },
   trends: {
     daily: [
-      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: null, "antigravity-cli": null },
-      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": null, partialSources: ["antigravity"] }
+      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: null, "antigravity-cli": 30 },
+      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": 90, partialSources: ["antigravity"] }
     ],
     weekly: [
-      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, "antigravity-cli": null, partialSources: ["antigravity"] },
-      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": null }
+      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, "antigravity-cli": 210, partialSources: ["antigravity"] },
+      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": 630 }
     ],
     monthly: [
-      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, "antigravity-cli": null, partialSources: ["antigravity"] },
-      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": null }
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, "antigravity-cli": 900, partialSources: ["antigravity"] },
+      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": 1_800 }
     ]
   },
   budgets: { daily: 100, weekly: 250, monthly: 2_000 },
@@ -168,7 +174,9 @@ const snapshot: DashboardSnapshot = {
   turns: [
     fixtureTurn("codex-turn", "codex", "Refactor the authentication parser", 600),
     fixtureTurn("claude-subagent-turn", "claude", "Inspect the parser tests", 200),
-    fixtureTurn("open-turn", "opencode", "Write the database migration", 400)
+    fixtureTurn("open-turn", "opencode", "Write the database migration", 400),
+    fixtureTurn("antigravity-turn", "antigravity", "Inspect IDE context usage", 50),
+    fixtureTurn("antigravity-cli-turn", "antigravity-cli", "Review CLI token totals", 90)
   ],
   health: [
     {
@@ -189,6 +197,22 @@ const snapshot: DashboardSnapshot = {
     },
     {
       source: "opencode",
+      complete: true,
+      completedAt: "2026-07-09T04:00:00.000Z",
+      sessionCount: 1,
+      turnCount: 1,
+      issues: []
+    },
+    {
+      source: "antigravity",
+      complete: false,
+      completedAt: "2026-07-09T04:00:00.000Z",
+      sessionCount: 1,
+      turnCount: 1,
+      issues: []
+    },
+    {
+      source: "antigravity-cli",
       complete: true,
       completedAt: "2026-07-09T04:00:00.000Z",
       sessionCount: 1,
@@ -284,6 +308,36 @@ describe("App", () => {
       target: { value: "codex" }
     });
     expect(screen.getByText("No turns match the current filters.")).toBeInTheDocument();
+  });
+
+  it("filters rows to exact Antigravity CLI and partial IDE usage", () => {
+    renderApp();
+
+    fireEvent.change(screen.getByLabelText("Source"), {
+      target: { value: "antigravity-cli" }
+    });
+
+    const table = screen.getByRole("table", { name: "Token usage by turn" });
+    expect(within(table).getByText("Review CLI token totals")).toBeInTheDocument();
+    expect(within(table).getByText("Antigravity CLI")).toBeInTheDocument();
+    expect(within(table).getByText("exact")).toBeInTheDocument();
+    expect(within(table).queryByText("Refactor the authentication parser")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Source"), {
+      target: { value: "antigravity" }
+    });
+    expect(within(table).getByText("Inspect IDE context usage")).toBeInTheDocument();
+    expect(within(table).getByText("partial")).toBeInTheDocument();
+  });
+
+  it("keeps Antigravity IDE and CLI import health independent", () => {
+    renderApp();
+
+    const health = within(screen.getByRole("heading", { name: "Import Health" }).closest("section")!);
+    const ideRow = health.getByText("Antigravity IDE").closest<HTMLElement>(".health-row")!;
+    const cliRow = health.getByText("Antigravity CLI").closest<HTMLElement>(".health-row")!;
+    expect(within(ideRow).getByText("Needs attention")).toBeInTheDocument();
+    expect(within(cliRow).getByText("Healthy")).toBeInTheDocument();
   });
 
   it("opens full prompt and visible response details for the selected row", () => {

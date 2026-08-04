@@ -48,16 +48,19 @@ await new Promise((resolveReady) => server.listen(0, "127.0.0.1", resolveReady))
 const address = server.address();
 const port = typeof address === "object" && address ? address.port : 0;
 
-const sources = ["codex", "claude", "opencode", "antigravity"];
-const models = ["gpt-5", "claude-sonnet-4", "gpt-5", "gemini-3-pro"];
+const sources = ["codex", "claude", "opencode", "antigravity", "antigravity-cli"];
+const models = ["gpt-5", "claude-sonnet-4", "gpt-5", "gemini-3-pro", "gemini-3-pro"];
 const prompts = [
   "Refactor auth middleware to support API key auth",
   "Add rate limiting to the upload endpoint",
   "Explain why the CI workflow is failing",
   "Implement soft delete for user accounts",
   "Optimize file watcher CPU usage",
+  "Write the database migration",
   "Improve deployment documentation",
-  "Write the database migration"
+  "Review CLI token accounting",
+  "Inspect IDE context usage",
+  "Document source health behavior"
 ];
 
 const turns = prompts.map((prompt, index) => {
@@ -70,10 +73,14 @@ const turns = prompts.map((prompt, index) => {
     source,
     sourceSessionId: `session-${index}`,
     sourceTurnId: `turn-${index}`,
-    executionScope: source === "claude" && index === 5 ? "subagent" : "main",
+    executionScope: source === "claude" && index === 6 ? "subagent" : "main",
     timestamp: new Date(2026, 6, 9, 11 - Math.floor(index / 2), 23 - index * 2, 41).toISOString(),
     model: models[index % models.length],
-    provider: source === "claude" ? "anthropic" : source === "antigravity" ? "google" : "openai",
+    provider: source === "claude"
+      ? "anthropic"
+      : source === "antigravity" || source === "antigravity-cli"
+        ? "google"
+        : "openai",
     project: index % 2 ? "/Users/dev/atlas-web" : "/Users/dev/infra-tools",
     prompt,
     response:
@@ -92,23 +99,33 @@ const turns = prompts.map((prompt, index) => {
 });
 
 function makeInsights(startDate, endDate, total) {
-  const tokens = [Math.round(total * 0.55), Math.round(total * 0.3)];
-  tokens.push(total - tokens[0] - tokens[1]);
-  const ranked = (labels, paths = []) => labels.map((label, index) => ({
-    key: label.toLowerCase(),
-    label,
-    ...(paths[index] ? { fullLabel: paths[index] } : {}),
-    tokens: tokens[index],
-    share: tokens[index] / total,
-    partial: index === 1
-  }));
+  const ranked = (labels, paths = [], partialIndex = 1) => {
+    const tokenShare = Math.floor(total / labels.length);
+    return labels.map((label, index) => {
+      const tokens = index === labels.length - 1
+        ? total - tokenShare * (labels.length - 1)
+        : tokenShare;
+      return {
+        key: label.toLowerCase(),
+        label,
+        ...(paths[index] ? { fullLabel: paths[index] } : {}),
+        tokens,
+        share: tokens / total,
+        partial: index === partialIndex
+      };
+    });
+  };
   return {
     startDate,
     endDate,
     total,
     partial: true,
     contributors: {
-      sources: ranked(["Codex", "OpenCode", "Antigravity"]),
+      sources: ranked(
+        ["Codex", "Antigravity CLI", "OpenCode", "Antigravity IDE"],
+        [],
+        3
+      ),
       projects: ranked(
         ["token-usage", "notes", "Unknown"],
         ["/Users/demo/work/token-usage", "/Users/demo/work/notes", undefined]
@@ -191,9 +208,12 @@ function makeComparison(
       sources: {
         increases: [
           mover("codex", "Codex", 3_100_000, 4_050_000, "estimated"),
-          mover("claude", "Claude Code", 2_650_000, 3_100_000)
+          mover("antigravity-cli", "Antigravity CLI", 2_650_000, 3_100_000)
         ],
-        decreases: [mover("opencode", "OpenCode", 2_150_000, 1_500_000)],
+        decreases: [
+          mover("opencode", "OpenCode", 2_150_000, 1_500_000),
+          mover("antigravity", "Antigravity IDE", 1_950_000, 1_400_000)
+        ],
         omittedCount: 1
       },
       projects: {
@@ -238,6 +258,7 @@ const snapshot = {
         claude: 510_000 + (index % 4) * 65_000,
         opencode: 420_000 + (index % 4) * 80_000,
         antigravity: 250_000 + (index % 3) * 60_000,
+        "antigravity-cli": 320_000 + (index % 4) * 55_000,
         partialSources: ["antigravity"]
       };
     }),
@@ -254,6 +275,7 @@ const snapshot = {
         claude: 3_100_000 + (index % 4) * 390_000,
         opencode: 2_450_000 + (index % 4) * 480_000,
         antigravity: 1_500_000 + (index % 3) * 360_000,
+        "antigravity-cli": 1_920_000 + (index % 4) * 330_000,
         partialSources: ["antigravity"]
       };
     }),
@@ -270,6 +292,7 @@ const snapshot = {
         claude: 12_400_000 + (index % 4) * 1_520_000,
         opencode: 10_080_000 + (index % 4) * 1_920_000,
         antigravity: 6_000_000 + (index % 3) * 1_440_000,
+        "antigravity-cli": 7_680_000 + (index % 4) * 1_320_000,
         partialSources: ["antigravity"]
       };
     })
@@ -363,10 +386,59 @@ const snapshot = {
       completedAt: new Date().toISOString(),
       sessionCount: 6,
       turnCount: 29,
-      issues: [{ sourcePath: "legacy.pb", severity: "warning", message: "Legacy language server unavailable" }]
-    }
+      issues: [{ sourcePath: "legacy.pb", severity: "error", message: "Legacy language server unavailable" }]
+    },
+    { source: "antigravity-cli", complete: true, completedAt: new Date().toISOString(), sessionCount: 8, turnCount: 36, issues: [] }
   ]
 };
+
+async function verifyFiveSourceLayout(page, viewportLabel) {
+  const result = await page.evaluate(() => {
+    const sourceLabels = Array.from(document.querySelectorAll(".legend > span"))
+      .map((element) => element.textContent?.trim());
+    const clippedLabels = Array.from(
+      document.querySelectorAll(".legend > span, .health-row > span")
+    ).filter((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.left < 0 || bounds.right > document.documentElement.clientWidth + 1;
+    }).map((element) => element.textContent?.trim());
+    const overflowingElements = Array.from(document.querySelectorAll("body *"))
+      .filter((element) => {
+        const bounds = element.getBoundingClientRect();
+        return bounds.left < -1 || bounds.right > document.documentElement.clientWidth + 1;
+      })
+      .slice(0, 8)
+      .map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return `${element.tagName.toLowerCase()}.${element.className} [${bounds.left}, ${bounds.right}]`;
+      });
+    return {
+      sourceLabels,
+      clippedLabels,
+      overflowingElements,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth
+    };
+  });
+  const expectedLabels = [
+    "Codex",
+    "Claude Code",
+    "OpenCode",
+    "Antigravity IDE",
+    "Antigravity CLI"
+  ];
+  if (JSON.stringify(result.sourceLabels) !== JSON.stringify(expectedLabels)) {
+    throw new Error(`${viewportLabel}: expected five source labels, received ${result.sourceLabels.join(", ")}`);
+  }
+  if (result.documentWidth > result.viewportWidth + 1) {
+    throw new Error(
+      `${viewportLabel}: dashboard overflows horizontally (${result.documentWidth}px > ${result.viewportWidth}px): ${result.overflowingElements.join("; ")}`
+    );
+  }
+  if (result.clippedLabels.length > 0) {
+    throw new Error(`${viewportLabel}: clipped source labels: ${result.clippedLabels.join(", ")}`);
+  }
+}
 
 const browser = await chromium.launch({
   executablePath: browserPath,
@@ -416,12 +488,14 @@ try {
   await budgetEditor.getByLabel("Monthly", { exact: true }).waitFor();
   await budgetEditor.getByRole("button", { name: "Cancel" }).click();
   await budgetEditor.waitFor({ state: "hidden" });
+  await verifyFiveSourceLayout(page, "Desktop");
   await page.screenshot({ path: screenshotPath, fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await verifyFiveSourceLayout(page, "Mobile");
   await page.screenshot({ path: mobileScreenshotPath, fullPage: true });
-  console.log(`Visual QA passed: ${screenshotPath}`);
-  console.log(`Mobile QA captured: ${mobileScreenshotPath}`);
+  console.log(`Desktop visual QA passed with five sources and no clipping: ${screenshotPath}`);
+  console.log(`Mobile visual QA passed with five sources and no clipping: ${mobileScreenshotPath}`);
 } finally {
   await browser.close();
   await new Promise((resolveClosed) => server.close(resolveClosed));

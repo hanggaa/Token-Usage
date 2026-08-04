@@ -1167,6 +1167,7 @@ tbody tr.selected {
   }
 
   .legend {
+    flex-wrap: wrap;
     gap: 8px;
   }
 

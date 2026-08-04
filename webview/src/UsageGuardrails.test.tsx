@@ -289,6 +289,26 @@ it("keeps contributors visible when the budget is disabled", () => {
   expect(screen.getByText("Codex")).toBeInTheDocument();
 });
 
+it("shows Antigravity CLI as a source contributor", () => {
+  renderGuardrails({
+    insights: {
+      contributors: {
+        ...baseInsights.contributors,
+        sources: [{
+          key: "antigravity-cli",
+          label: "Antigravity CLI",
+          tokens: 800,
+          share: 1,
+          partial: false
+        }]
+      }
+    }
+  });
+
+  const sources = screen.getByRole("heading", { name: "Sources" }).closest("div")!;
+  expect(within(sources).getByText("Antigravity CLI")).toBeInTheDocument();
+});
+
 it("floors remaining tokens at zero after exceeding", () => {
   renderGuardrails({ budget: 100, used: 125 });
   const remaining = screen.getByText("Remaining").parentElement!;
