@@ -62,6 +62,64 @@ describe("applyCommittedWal", () => {
     expect(applyCommittedWal(base, wal)).toEqual(base);
   });
 
+  it("stops at a stale suffix left after WAL reset without truncation", () => {
+    const base = databaseWithPages([page(1, 0x11), page(2, 0x22)]);
+    const oldWal = walFile([
+      frame(1, 2, page(1, 0x33)),
+      frame(2, 2, page(2, 0x44))
+    ]);
+    const currentWal = walFile(
+      [frame(1, 2, page(1, 0x55))],
+      1_024,
+      { salt1: 0x22334455, salt2: 0x66778899 }
+    );
+    const reusedWal = oldWal.slice();
+    reusedWal.set(currentWal);
+
+    const snapshot = applyCommittedWal(base, reusedWal);
+
+    expect(byteFromPage(snapshot, 1)).toBe(0x55);
+    expect(byteFromPage(snapshot, 2)).toBe(0x22);
+  });
+
+  it("uses the base database for an empty reset generation with stale physical frames", () => {
+    const base = databaseWithPages([page(1, 0x11)]);
+    const reusedWal = walFile([frame(1, 1, page(1, 0x33))]);
+    const resetHeader = walFile(
+      [],
+      1_024,
+      { salt1: 0x22334455, salt2: 0x66778899 }
+    );
+    reusedWal.set(resetHeader);
+
+    expect(applyCommittedWal(base, reusedWal)).toEqual(base);
+  });
+
+  it("uses the base database when an empty reset leaves a truncated stale frame header", () => {
+    const base = databaseWithPages([page(1, 0x11)]);
+    const reusedWal = walFile([frame(1, 1, page(1, 0x33))]);
+    const resetHeader = walFile(
+      [],
+      1_024,
+      { salt1: 0x22334455, salt2: 0x66778899 }
+    );
+    reusedWal.set(resetHeader);
+    const truncatedStaleHeader = reusedWal.subarray(0, 32 + 16);
+
+    expect(applyCommittedWal(base, truncatedStaleHeader)).toEqual(base);
+  });
+
+  it("applies the last safe commit before a checksum-invalid suffix", () => {
+    const base = databaseWithPages([page(1, 0x11)]);
+    const wal = walFile([
+      frame(1, 1, page(1, 0x22)),
+      frame(1, 1, page(1, 0x33))
+    ]);
+    wal[wal.length - 1] ^= 0xff;
+
+    expect(byteFromPage(applyCommittedWal(base, wal), 1)).toBe(0x22);
+  });
+
   it("rejects a checksum mismatch instead of ignoring the WAL", () => {
     const base = databaseWithPages([page(1, 0x11)]);
     const wal = walFile([frame(1, 1, page(1, 0x22))]);
@@ -83,20 +141,23 @@ describe("applyCommittedWal", () => {
     expect(byteFromPage(applyCommittedWal(base, wal), 1)).toBe(0x22);
   });
 
-  it("rejects a frame whose salt differs from the WAL header", () => {
-    const base = databaseWithPages([page(1, 0x11)]);
-    const wal = walFile([frame(1, 1, page(1, 0x22))]);
-    new DataView(wal.buffer).setUint32(32 + 8, 0x99aabbcc, false);
-
-    expect(() => applyCommittedWal(base, wal)).toThrow(/salt/i);
-  });
-
   it("rejects a WAL with a torn final frame", () => {
     const base = databaseWithPages([page(1, 0x11)]);
     const complete = walFile([frame(1, 1, page(1, 0x22))]);
     const torn = complete.subarray(0, complete.length - 1);
 
     expect(() => applyCommittedWal(base, torn)).toThrow(/frame|length|truncated/i);
+  });
+
+  it("stops at a torn physical suffix after the last safe commit", () => {
+    const base = databaseWithPages([page(1, 0x11)]);
+    const complete = walFile([
+      frame(1, 1, page(1, 0x22)),
+      frame(1, 1, page(1, 0x33))
+    ]);
+    const tornSuffix = complete.subarray(0, complete.length - 100);
+
+    expect(byteFromPage(applyCommittedWal(base, tornSuffix), 1)).toBe(0x22);
   });
 
   it("rejects invalid source and WAL headers", () => {
@@ -155,6 +216,55 @@ describe("readSqliteSnapshot", () => {
     const snapshot = await readSqliteSnapshot("/history/state.vscdb", { io });
 
     expect(byteFromPage(snapshot, 1)).toBe(0x22);
+  });
+
+  it("retries a stable WAL validation failure before returning a safe snapshot", async () => {
+    const database = databaseWithPages([page(1, 0x11)]);
+    const invalidWal = walFile([frame(1, 1, page(1, 0x22))]);
+    invalidWal[invalidWal.length - 1] ^= 0xff;
+    const validWal = walFile([frame(1, 1, page(1, 0x33))]);
+    let walReads = 0;
+    const io: SnapshotIo = {
+      async readFile(path) {
+        if (!path.endsWith("-wal")) return database;
+        walReads += 1;
+        return walReads === 1 ? invalidWal : validWal;
+      },
+      async stat(path) {
+        return path.endsWith("-wal")
+          ? { size: validWal.byteLength, mtimeMs: 1 }
+          : { size: database.byteLength, mtimeMs: 1 };
+      }
+    };
+
+    const snapshot = await readSqliteSnapshot("/history/state.vscdb", { io });
+
+    expect(walReads).toBe(2);
+    expect(byteFromPage(snapshot, 1)).toBe(0x33);
+  });
+
+  it("preserves the actionable WAL validation error after retries are exhausted", async () => {
+    const database = databaseWithPages([page(1, 0x11)]);
+    const invalidWal = walFile([frame(1, 1, page(1, 0x22))]);
+    invalidWal[invalidWal.length - 1] ^= 0xff;
+    let walReads = 0;
+    const io: SnapshotIo = {
+      async readFile(path) {
+        if (!path.endsWith("-wal")) return database;
+        walReads += 1;
+        return invalidWal;
+      },
+      async stat(path) {
+        return path.endsWith("-wal")
+          ? { size: invalidWal.byteLength, mtimeMs: 1 }
+          : { size: database.byteLength, mtimeMs: 1 };
+      }
+    };
+
+    await expect(readSqliteSnapshot("/history/state.vscdb", { io })).rejects.toThrow(
+      /checksum/i
+    );
+    expect(walReads).toBe(3);
   });
 
   it("fails after all three reads change", async () => {

@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 
 const WAL_HEADER_BYTES = 32;
 const WAL_FRAME_HEADER_BYTES = 24;
+const WAL_FRAME_SALTS_END = 16;
 const SQLITE_HEADER = new TextEncoder().encode("SQLite format 3\0");
 const WAL_MAGIC_LITTLE_CHECKSUM = 0x377f0682;
 const WAL_MAGIC_BIG_CHECKSUM = 0x377f0683;
@@ -70,6 +71,7 @@ export async function readSqliteSnapshot(
 
   const io = options.io ?? defaultIo;
   const walPath = `${databasePath}-wal`;
+  let lastValidationError: unknown = null;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const before = await io.stat(databasePath);
@@ -93,12 +95,20 @@ export async function readSqliteSnapshot(
       && databaseBytes.byteLength === before.size
       && (walBytes === null || walBytes.byteLength === walBefore?.size)
     ) {
-      return walBytes === null
-        ? databaseBytes
-        : applyCommittedWal(databaseBytes, walBytes);
+      if (walBytes === null) {
+        return databaseBytes;
+      }
+      try {
+        return applyCommittedWal(databaseBytes, walBytes);
+      } catch (error) {
+        lastValidationError = error;
+      }
     }
   }
 
+  if (lastValidationError) {
+    throw lastValidationError;
+  }
   throw new Error(`SQLite source changed during ${attempts} snapshot attempts`);
 }
 
@@ -165,10 +175,6 @@ function validateWal(
   }
 
   const frameBytes = WAL_FRAME_HEADER_BYTES + pageSize;
-  if ((wal.byteLength - WAL_HEADER_BYTES) % frameBytes !== 0) {
-    throw new Error("SQLite WAL contains a truncated frame");
-  }
-
   const littleEndianChecksum = magic === WAL_MAGIC_LITTLE_CHECKSUM;
   let [s1, s2] = checksum(wal, 0, 24, littleEndianChecksum, 0, 0);
   if (view.getUint32(24, false) !== s1 || view.getUint32(28, false) !== s2) {
@@ -186,32 +192,60 @@ function validateWal(
     offset < wal.byteLength;
     offset += frameBytes
   ) {
-    const pageNumber = view.getUint32(offset, false);
-    if (pageNumber === 0) {
-      throw new Error("SQLite WAL frame has an invalid page number");
+    const remaining = wal.byteLength - offset;
+    if (remaining < WAL_FRAME_SALTS_END) {
+      if (committedFrameIndex >= 0) break;
+      throw new Error("SQLite WAL contains a truncated frame header");
     }
+
     if (
       view.getUint32(offset + 8, false) !== salt1
       || view.getUint32(offset + 12, false) !== salt2
     ) {
-      throw new Error("SQLite WAL frame salt mismatch");
+      break;
+    }
+    if (remaining < WAL_FRAME_HEADER_BYTES) {
+      if (committedFrameIndex >= 0) break;
+      throw new Error("SQLite WAL contains a truncated frame header");
+    }
+    if (remaining < frameBytes) {
+      if (committedFrameIndex >= 0) break;
+      throw new Error("SQLite WAL contains a truncated frame");
     }
 
-    [s1, s2] = checksum(wal, offset, 8, littleEndianChecksum, s1, s2);
-    [s1, s2] = checksum(
+    const pageNumber = view.getUint32(offset, false);
+    if (pageNumber === 0) {
+      if (committedFrameIndex >= 0) break;
+      throw new Error("SQLite WAL frame has an invalid page number");
+    }
+
+    let nextS1: number;
+    let nextS2: number;
+    [nextS1, nextS2] = checksum(
       wal,
-      offset + WAL_FRAME_HEADER_BYTES,
-      pageSize,
+      offset,
+      8,
       littleEndianChecksum,
       s1,
       s2
     );
+    [nextS1, nextS2] = checksum(
+      wal,
+      offset + WAL_FRAME_HEADER_BYTES,
+      pageSize,
+      littleEndianChecksum,
+      nextS1,
+      nextS2
+    );
     if (
-      view.getUint32(offset + 16, false) !== s1
-      || view.getUint32(offset + 20, false) !== s2
+      view.getUint32(offset + 16, false) !== nextS1
+      || view.getUint32(offset + 20, false) !== nextS2
     ) {
+      if (committedFrameIndex >= 0) break;
       throw new Error("SQLite WAL frame checksum mismatch");
     }
+    s1 = nextS1;
+    s2 = nextS2;
 
     frames.push({
       pageNumber,

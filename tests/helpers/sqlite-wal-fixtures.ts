@@ -12,6 +12,11 @@ const WAL_SALT_1 = 0x11223344;
 const WAL_SALT_2 = 0x55667788;
 const SQLITE_HEADER = new TextEncoder().encode("SQLite format 3\0");
 
+export interface WalFileOptions {
+  salt1?: number;
+  salt2?: number;
+}
+
 function checksum(
   bytes: Uint8Array,
   length: number,
@@ -61,17 +66,23 @@ export function frame(
   return { pageNumber, committedPageCount, page: pageBytes };
 }
 
-export function walFile(frames: WalFrameFixture[], pageSize = 1_024): Uint8Array {
+export function walFile(
+  frames: WalFrameFixture[],
+  pageSize = 1_024,
+  options: WalFileOptions = {}
+): Uint8Array {
   const frameBytes = WAL_FRAME_HEADER_BYTES + pageSize;
   const wal = new Uint8Array(WAL_HEADER_BYTES + frames.length * frameBytes);
   const view = new DataView(wal.buffer);
+  const salt1 = options.salt1 ?? WAL_SALT_1;
+  const salt2 = options.salt2 ?? WAL_SALT_2;
 
   view.setUint32(0, WAL_MAGIC_LITTLE_CHECKSUM, false);
   view.setUint32(4, WAL_VERSION, false);
   view.setUint32(8, pageSize, false);
   view.setUint32(12, 0, false);
-  view.setUint32(16, WAL_SALT_1, false);
-  view.setUint32(20, WAL_SALT_2, false);
+  view.setUint32(16, salt1, false);
+  view.setUint32(20, salt2, false);
 
   let [s1, s2] = checksum(wal, 24);
   view.setUint32(24, s1, false);
@@ -85,8 +96,8 @@ export function walFile(frames: WalFrameFixture[], pageSize = 1_024): Uint8Array
     const offset = WAL_HEADER_BYTES + index * frameBytes;
     view.setUint32(offset, value.pageNumber, false);
     view.setUint32(offset + 4, value.committedPageCount, false);
-    view.setUint32(offset + 8, WAL_SALT_1, false);
-    view.setUint32(offset + 12, WAL_SALT_2, false);
+    view.setUint32(offset + 8, salt1, false);
+    view.setUint32(offset + 12, salt2, false);
     wal.set(value.page, offset + WAL_FRAME_HEADER_BYTES);
 
     [s1, s2] = checksum(
