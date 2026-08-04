@@ -222,11 +222,22 @@ export class TrackerStore {
     await this.withWriteLock(() => {
       this.database.run("BEGIN");
       try {
+        const fullyObservedSessionIds = new Set(
+          result.fullyObservedSessionIds
+            ?? result.sessions.map((session) => session.sourceSessionId)
+        );
         for (const session of result.sessions) {
           this.database.run(
-            `INSERT OR REPLACE INTO sessions
+            `INSERT INTO sessions
               (source, source_session_id, title, project, started_at, updated_at, source_path, fingerprint)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(source, source_session_id) DO UPDATE SET
+               title = excluded.title,
+               project = excluded.project,
+               started_at = excluded.started_at,
+               updated_at = excluded.updated_at,
+               source_path = excluded.source_path,
+               fingerprint = excluded.fingerprint`,
             [
               session.source,
               session.sourceSessionId,
@@ -238,13 +249,21 @@ export class TrackerStore {
               session.fingerprint
             ]
           );
-          this.database.run(
-            "DELETE FROM turns WHERE source = ? AND source_session_id = ?",
-            [session.source, session.sourceSessionId]
-          );
+          if (fullyObservedSessionIds.has(session.sourceSessionId)) {
+            this.database.run(
+              "DELETE FROM turns WHERE source = ? AND source_session_id = ?",
+              [session.source, session.sourceSessionId]
+            );
+          }
         }
 
         for (const turn of result.turns) {
+          if (
+            !fullyObservedSessionIds.has(turn.sourceSessionId)
+            && rows(this.database, "SELECT 1 FROM turns WHERE id = ?", [turn.id]).length > 0
+          ) {
+            continue;
+          }
           this.database.run(
             `INSERT OR REPLACE INTO turns
               (id, source, source_session_id, source_turn_id, execution_scope, timestamp, model, provider, project,

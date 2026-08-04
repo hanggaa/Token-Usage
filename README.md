@@ -58,7 +58,7 @@ Version 0.7.0 does not add cost tracking, notifications, arbitrary date ranges, 
 | Claude Code | Exact from assistant usage when input, cache creation, cache read, and output components are all reported; otherwise a partial lower bound | Offline estimate |
 | OpenCode | Exact from exported message usage | Offline estimate |
 | Antigravity CLI | Exact for recorded request input, output, cache, and reasoning data when present; older sessions with missing metadata use labeled visible-content estimates, partial lower bounds, or unavailable values | Offline estimate from visible user text |
-| Antigravity | Cumulative visible request context is a `≥` lower bound; visible output and exposed thinking are estimated; cache remains unavailable | Offline estimate from cleaned `<USER_REQUEST>` text |
+| Antigravity IDE | Cumulative visible request context is a `≥` lower bound; visible output and exposed thinking are estimated; cache remains unavailable | Offline estimate from cleaned `<USER_REQUEST>` text |
 
 Cached-input and reasoning-output values are shown separately and are not double-counted in totals.
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,9 +7,18 @@ import type {
   ImportResult,
   NormalizedSession,
   NormalizedTurn,
+  SourceAdapter,
   Source
 } from "../../src/domain/types.js";
+import { AntigravityCliAdapter } from "../../src/adapters/antigravity-cli-source.js";
+import type { AntigravityCliStepRow } from "../../src/adapters/antigravity-cli.js";
+import { ImportCoordinator } from "../../src/services/import-coordinator.js";
 import { TrackerStore } from "../../src/storage/tracker-store.js";
+import {
+  plannerStep,
+  plannerStepWithoutUsage,
+  userStep
+} from "../helpers/antigravity-cli-fixtures.js";
 
 const temporaryRoots: string[] = [];
 
@@ -124,6 +133,51 @@ function fixtureImport(source: Source, sessionId: string, complete = true): Impo
   };
 }
 
+function additionalTurn(
+  imported: ImportResult,
+  sourceTurnId: string,
+  timestamp: string
+): NormalizedTurn {
+  const original = imported.turns[0];
+  return {
+    ...original,
+    id: `${original.source}:${original.sourceSessionId}:${sourceTurnId}`,
+    sourceTurnId,
+    timestamp,
+    response: `Response for ${sourceTurnId}`,
+    fingerprint: `turn-${original.sourceSessionId}-${sourceTurnId}`
+  };
+}
+
+async function conversationDatabase(
+  cascadeId: string,
+  stepRows: AntigravityCliStepRow[]
+): Promise<Uint8Array> {
+  const SQL = await initSqlJs({
+    locateFile: (file) => resolve("node_modules/sql.js/dist", file)
+  });
+  const database = new SQL.Database();
+  database.run(
+    "CREATE TABLE trajectory_meta (trajectory_id TEXT, cascade_id TEXT, trajectory_type INTEGER, source INTEGER)"
+  );
+  database.run(
+    "CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, metadata BLOB, step_payload BLOB)"
+  );
+  database.run(
+    "INSERT INTO trajectory_meta VALUES (?, ?, ?, ?)",
+    ["trajectory-fixture", cascadeId, 4, 17]
+  );
+  for (const row of stepRows) {
+    database.run(
+      "INSERT INTO steps VALUES (?, ?, ?, ?, ?)",
+      [row.idx, row.stepType, row.status, row.metadata, row.stepPayload]
+    );
+  }
+  const bytes = database.export();
+  database.close();
+  return bytes;
+}
+
 describe("TrackerStore", () => {
   it("persists normalized turns and metrics idempotently", async () => {
     const store = await createStore();
@@ -182,6 +236,116 @@ describe("TrackerStore", () => {
     expect(await store.getTurns()).toHaveLength(1);
   });
 
+  it("retains prior turns and exact conflicts for a partially observed session", async () => {
+    const store = await createStore();
+    const initial = fixtureImport("antigravity-cli", "shared");
+    initial.turns.push(additionalTurn(
+      initial,
+      "turn-2",
+      "2026-07-09T00:01:00.000Z"
+    ));
+    await store.applyImport(initial);
+    const partialTurn = {
+      ...initial.turns[0],
+      response: "Partial replacement",
+      fingerprint: "partial-turn",
+      metrics: initial.turns[0].metrics.map((metric) => (
+        metric.kind === "request_input" || metric.kind === "output" || metric.kind === "total"
+          ? { ...metric, quality: "partial" as const }
+          : metric
+      ))
+    };
+    const safeNewTurn = additionalTurn(
+      initial,
+      "turn-3",
+      "2026-07-09T00:02:00.000Z"
+    );
+
+    await store.applyImport({
+      ...initial,
+      complete: false,
+      turns: [partialTurn, safeNewTurn],
+      fullyObservedSessionIds: [],
+      issues: [{
+        sourcePath: "/source/shared",
+        severity: "error",
+        message: "Step 1 was malformed"
+      }]
+    });
+
+    const turns = await store.getTurns();
+    expect(turns.map((turn) => turn.sourceTurnId).toSorted()).toEqual([
+      "turn-1",
+      "turn-2",
+      "turn-3"
+    ]);
+    expect(turns.find((turn) => turn.sourceTurnId === "turn-1")).toMatchObject({
+      response: "Test response",
+      metrics: expect.arrayContaining([
+        expect.objectContaining({ kind: "total", value: 120, quality: "exact" })
+      ])
+    });
+    expect(turns.find((turn) => turn.sourceTurnId === "turn-3")).toMatchObject({
+      response: "Response for turn-3"
+    });
+  });
+
+  it("replaces a fully observed session even when another source session failed", async () => {
+    const store = await createStore();
+    const initial = fixtureImport("antigravity-cli", "shared");
+    initial.turns.push(additionalTurn(
+      initial,
+      "turn-2",
+      "2026-07-09T00:01:00.000Z"
+    ));
+    await store.applyImport(initial);
+    const replacement = {
+      ...initial.turns[0],
+      response: "Fresh complete response",
+      fingerprint: "fresh-complete-turn"
+    };
+
+    await store.applyImport({
+      ...initial,
+      complete: false,
+      turns: [replacement],
+      fullyObservedSessionIds: ["shared"],
+      issues: [{
+        sourcePath: "/source/another-session",
+        severity: "error",
+        message: "Another session failed"
+      }]
+    });
+
+    expect(await store.getTurns()).toEqual([
+      expect.objectContaining({
+        sourceTurnId: "turn-1",
+        response: "Fresh complete response"
+      })
+    ]);
+  });
+
+  it("keeps legacy adapter sessions fully observed when no completeness list is supplied", async () => {
+    const store = await createStore();
+    const initial = fixtureImport("codex", "session-1");
+    initial.turns.push(additionalTurn(
+      initial,
+      "turn-2",
+      "2026-07-09T00:01:00.000Z"
+    ));
+    await store.applyImport(initial);
+
+    await store.applyImport({
+      ...initial,
+      complete: false,
+      turns: [initial.turns[0]]
+    });
+
+    expect((await store.getTurns()).map((turn) => turn.sourceTurnId)).toEqual([
+      "turn-1"
+    ]);
+  });
+
   it("removes missing source sessions after a complete scan", async () => {
     const store = await createStore();
     await store.applyImport(fixtureImport("codex", "session-1"));
@@ -208,6 +372,87 @@ describe("TrackerStore", () => {
 
     expect((await store.getTurns()).map((turn) => turn.sourceSessionId)).toEqual([
       "ide-only"
+    ]);
+  });
+
+  it("keeps partial CLI history and the IDE copy across parser-to-store reconciliation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "token-store-antigravity-integration-"));
+    temporaryRoots.push(root);
+    const conversations = join(root, "conversations");
+    await mkdir(conversations, { recursive: true });
+    const sourcePath = join(conversations, "shared.db");
+    await writeFile(sourcePath, "snapshot supplied by controlled test reader");
+    const malformedPlanner: AntigravityCliStepRow = {
+      ...plannerStepWithoutUsage(1, "Unreadable."),
+      stepPayload: Uint8Array.from([0xa2, 0x01, 0x05, 0x61])
+    };
+    const snapshot = await conversationDatabase("shared", [
+      userStep(0, "Current partial turn.", "2026-08-04T01:00:00.000Z"),
+      malformedPlanner,
+      plannerStep(2, "Current visible response.", { inputTokens: 8, outputTokens: 3 })
+    ]);
+    const cliAdapter = new AntigravityCliAdapter(root, undefined, async () => snapshot);
+    const ideImport = fixtureImport("antigravity", "shared");
+    const ideAdapter: SourceAdapter = {
+      source: "antigravity",
+      detect: async () => ({ available: true, detail: "fixture", roots: [root] }),
+      scan: async () => ideImport
+    };
+    const store = await createStore();
+    const priorCli = fixtureImport("antigravity-cli", "shared");
+    priorCli.turns[0] = {
+      ...priorCli.turns[0],
+      id: "antigravity-cli:shared:0",
+      sourceTurnId: "0",
+      response: "Prior complete response",
+      fingerprint: "prior-complete-turn"
+    };
+    priorCli.turns.push(additionalTurn(
+      priorCli,
+      "prior-extra",
+      "2026-07-09T00:01:00.000Z"
+    ));
+    await store.applyImport(priorCli);
+
+    await new ImportCoordinator([cliAdapter, ideAdapter], store).refresh("full");
+
+    const turns = await store.getTurns();
+    expect(turns.map((turn) => `${turn.source}:${turn.sourceTurnId}`).toSorted()).toEqual([
+      "antigravity-cli:0",
+      "antigravity-cli:prior-extra",
+      "antigravity:turn-1"
+    ]);
+    expect(turns.find((turn) => turn.id === "antigravity-cli:shared:0")).toMatchObject({
+      response: "Prior complete response",
+      metrics: expect.arrayContaining([
+        expect.objectContaining({ kind: "total", quality: "exact" })
+      ])
+    });
+    expect((await store.getHealth()).find((health) => health.source === "antigravity-cli"))
+      .toMatchObject({
+        complete: false,
+        issues: [expect.objectContaining({
+          sourcePath,
+          message: expect.stringMatching(/Step 1:.*protobuf/i)
+        })]
+      });
+  });
+
+  it("never persists informational dedup diagnostics as health issues", async () => {
+    const store = await createStore();
+    await store.applyImport({
+      ...fixtureImport("antigravity-cli", "shared"),
+      diagnostics: [
+        "Excluded 1 Antigravity IDE session duplicated by Antigravity CLI"
+      ]
+    });
+
+    expect(await store.getHealth()).toEqual([
+      expect.objectContaining({
+        source: "antigravity-cli",
+        complete: true,
+        issues: []
+      })
     ]);
   });
 

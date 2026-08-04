@@ -14,7 +14,13 @@ export function reconcileAntigravityResults(results: ImportResult[]): ImportResu
   const ide = results.find((result) => result.source === "antigravity");
   if (!cli || !ide || cli.sessions.length === 0) return results;
 
-  const cliIds = new Set(cli.sessions.map((session) => session.sourceSessionId));
+  const emittedCliIds = new Set(
+    cli.sessions.map((session) => session.sourceSessionId)
+  );
+  const cliIds = new Set(
+    (cli.fullyObservedSessionIds ?? [...emittedCliIds])
+      .filter((sessionId) => emittedCliIds.has(sessionId))
+  );
   const duplicateIds = new Set(
     ide.sessions
       .map((session) => session.sourceSessionId)

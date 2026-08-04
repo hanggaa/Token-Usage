@@ -4,7 +4,10 @@ import type {
   SourceAdapter,
   SourceAvailability
 } from "../../src/domain/types.js";
-import { ImportCoordinator } from "../../src/services/import-coordinator.js";
+import {
+  ImportCoordinator,
+  reconcileAntigravityResults
+} from "../../src/services/import-coordinator.js";
 
 const importResult: ImportResult = {
   source: "codex",
@@ -136,6 +139,7 @@ describe("ImportCoordinator", () => {
     };
     const cli = {
       ...sourceResult("antigravity-cli", ["shared"]),
+      fullyObservedSessionIds: ["shared"],
       diagnostics: ["Existing CLI detail"]
     };
     const applied: ImportResult[] = [];
@@ -198,5 +202,83 @@ describe("ImportCoordinator", () => {
     expect(ideApplied?.seenSessionIds).toEqual(["shared"]);
     expect(cliApplied?.issues).toEqual(cli.issues);
     expect(cliApplied?.diagnostics).toBeUndefined();
+  });
+
+  it("keeps a valid IDE copy when the matching CLI session is not fully observed", async () => {
+    const ide = sourceResult("antigravity", ["shared"]);
+    const cli = {
+      ...sourceResult("antigravity-cli", ["shared"]),
+      complete: false,
+      fullyObservedSessionIds: [],
+      issues: [{
+        sourcePath: "/cli/shared.db",
+        severity: "error" as const,
+        message: "Step 2: malformed planner payload"
+      }]
+    };
+    const applied: ImportResult[] = [];
+    const coordinator = new ImportCoordinator(
+      [sourceAdapter(cli), sourceAdapter(ide)],
+      { applyImport: async (result) => { applied.push(result); } }
+    );
+
+    await coordinator.refresh("full");
+
+    const ideApplied = applied.find((result) => result.source === "antigravity");
+    const cliApplied = applied.find((result) => result.source === "antigravity-cli");
+    expect(ideApplied?.sessions.map((session) => session.sourceSessionId)).toEqual([
+      "shared"
+    ]);
+    expect(ideApplied?.turns.map((turn) => turn.sourceSessionId)).toEqual(["shared"]);
+    expect(ideApplied?.seenSessionIds).toEqual(["shared"]);
+    expect(cliApplied?.diagnostics).toBeUndefined();
+  });
+
+  it("deduplicates authoritative sessions with adapters in CLI-first order", async () => {
+    const cli = {
+      ...sourceResult("antigravity-cli", ["shared"]),
+      fullyObservedSessionIds: ["shared"]
+    };
+    const ide = sourceResult("antigravity", ["shared", "ide-only"]);
+    const applied: ImportResult[] = [];
+    const coordinator = new ImportCoordinator(
+      [sourceAdapter(cli), sourceAdapter(ide)],
+      { applyImport: async (result) => { applied.push(result); } }
+    );
+
+    await coordinator.refresh("full");
+
+    expect(applied.map((result) => result.source)).toEqual([
+      "antigravity-cli",
+      "antigravity"
+    ]);
+    expect(applied[1].sessions.map((session) => session.sourceSessionId)).toEqual([
+      "ide-only"
+    ]);
+  });
+
+  it("keeps reconciliation idempotent across repeated calls", () => {
+    const cli = {
+      ...sourceResult("antigravity-cli", ["shared"]),
+      fullyObservedSessionIds: ["shared"]
+    };
+    const ide = sourceResult("antigravity", ["shared", "ide-only"]);
+
+    const reconciled = reconcileAntigravityResults([ide, cli]);
+
+    expect(reconcileAntigravityResults(reconciled)).toEqual(reconciled);
+    expect(reconciled.find((result) => result.source === "antigravity-cli")?.diagnostics)
+      .toEqual(["Excluded 1 Antigravity IDE session duplicated by Antigravity CLI"]);
+  });
+
+  it("leaves nonduplicate Antigravity results unchanged", () => {
+    const cli = {
+      ...sourceResult("antigravity-cli", ["cli-only"]),
+      fullyObservedSessionIds: ["cli-only"]
+    };
+    const ide = sourceResult("antigravity", ["ide-only"]);
+    const results = [cli, ide];
+
+    expect(reconcileAntigravityResults(results)).toBe(results);
   });
 });
