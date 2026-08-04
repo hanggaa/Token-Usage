@@ -110,6 +110,11 @@
           "default": true,
           "description": "Import OpenCode CLI sessions."
         },
+        "tokenUsage.sources.antigravityCli.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Import Antigravity CLI sessions."
+        },
         "tokenUsage.sources.antigravity.enabled": {
           "type": "boolean",
           "default": true,
@@ -129,6 +134,11 @@
           "type": "string",
           "default": "",
           "description": "Optional OpenCode data-root override."
+        },
+        "tokenUsage.paths.antigravityCli": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Antigravity CLI data-root override."
         },
         "tokenUsage.paths.antigravity": {
           "type": "string",

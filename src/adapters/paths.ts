@@ -4,6 +4,7 @@ export interface SourcePaths {
   codex: string;
   claude: string;
   opencode: string;
+  antigravityCli: string;
   antigravityCurrent: string;
   antigravityLegacy: string;
 }
@@ -18,6 +19,7 @@ export function resolveSourcePaths(
     codex: join(home, ".codex", "sessions"),
     claude: join(claudeConfigRoot, "projects"),
     opencode: join(home, ".local", "share", "opencode"),
+    antigravityCli: join(home, ".gemini", "antigravity-cli"),
     antigravityCurrent: join(home, ".gemini", "antigravity-ide"),
     antigravityLegacy: join(home, ".gemini", "antigravity")
   };

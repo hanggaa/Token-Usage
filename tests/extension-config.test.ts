@@ -25,6 +25,31 @@ describe("extension background-import defaults", () => {
     expect(source).toContain('"sources.claude.enabled"');
   });
 
+  it("enables and wires Antigravity CLI history by default", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
+      contributes: {
+        configuration: {
+          properties: Record<string, { type?: string; default: unknown; description?: string }>;
+        };
+      };
+    };
+    const properties = manifest.contributes.configuration.properties;
+    const source = await readFile("src/extension.ts", "utf8");
+
+    expect(properties["tokenUsage.sources.antigravityCli.enabled"]).toMatchObject({
+      type: "boolean",
+      default: true,
+      description: "Import Antigravity CLI sessions."
+    });
+    expect(properties["tokenUsage.paths.antigravityCli"]).toMatchObject({
+      type: "string",
+      default: "",
+      description: "Optional Antigravity CLI data-root override."
+    });
+    expect(source).toContain("new AntigravityCliAdapter(antigravityCliRoot, wasmPath)");
+    expect(source).toContain('"sources.antigravityCli.enabled"');
+  });
+
   it("keeps background imports opt-in with a battery-conscious interval", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
       contributes: {

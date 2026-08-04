@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import * as vscode from "vscode";
 import { LocalAntigravityBridge } from "./adapters/antigravity-bridge.js";
+import { AntigravityCliAdapter } from "./adapters/antigravity-cli-source.js";
 import { AntigravityAdapter } from "./adapters/antigravity-source.js";
 import { ClaudeAdapter } from "./adapters/claude-source.js";
 import { CodexAdapter } from "./adapters/codex-source.js";
@@ -50,6 +51,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const codexRoot = configuredPath(configuration, "paths.codex", defaults.codex);
   const claudeRoot = configuredPath(configuration, "paths.claude", defaults.claude);
   const openCodeRoot = configuredPath(configuration, "paths.opencode", defaults.opencode);
+  const antigravityCliRoot = configuredPath(
+    configuration,
+    "paths.antigravityCli",
+    defaults.antigravityCli
+  );
   const antigravityRoot = configuredPath(
     configuration,
     "paths.antigravity",
@@ -72,6 +78,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
   if (configuration.get<boolean>("sources.opencode.enabled", true)) {
     adapters.push(new OpenCodeAdapter(openCodeRoot, undefined, wasmPath));
+  }
+  if (configuration.get<boolean>("sources.antigravityCli.enabled", true)) {
+    adapters.push(new AntigravityCliAdapter(antigravityCliRoot, wasmPath));
   }
   if (configuration.get<boolean>("sources.antigravity.enabled", true)) {
     adapters.push(

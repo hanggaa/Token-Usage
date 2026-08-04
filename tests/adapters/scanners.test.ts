@@ -102,6 +102,9 @@ describe("resolveSourcePaths", () => {
     expect(paths.codex).toBe(join("/Users/dev", ".codex", "sessions"));
     expect(paths.claude).toBe(join("/Users/dev", ".claude", "projects"));
     expect(paths.opencode).toBe(join("/Users/dev", ".local", "share", "opencode"));
+    expect(paths.antigravityCli).toBe(
+      join("/Users/dev", ".gemini", "antigravity-cli")
+    );
     expect(paths.antigravityCurrent).toBe(join("/Users/dev", ".gemini", "antigravity-ide"));
     expect(paths.antigravityLegacy).toBe(join("/Users/dev", ".gemini", "antigravity"));
   });
