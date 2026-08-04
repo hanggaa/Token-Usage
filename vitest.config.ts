@@ -10,6 +10,7 @@ export default defineConfig({
     setupFiles: [
       "./webview/src/test/setup.ts"
     ],
+    css: true,
     coverage: {
       provider: "v8",
       reporter: [

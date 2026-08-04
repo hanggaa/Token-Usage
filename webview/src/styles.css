@@ -285,6 +285,10 @@ tr:focus-visible {
   background: #e49a24;
 }
 
+.source-antigravity-cli {
+  background: #4caf50;
+}
+
 .chart {
   position: relative;
   display: grid;

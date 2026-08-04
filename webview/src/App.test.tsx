@@ -367,6 +367,26 @@ describe("App", () => {
     expect(container.querySelector(".bar-partial.source-antigravity")).not.toBeNull();
   });
 
+  it("renders a non-zero Antigravity CLI chart segment with a visible source color", () => {
+    const currentDaily = snapshot.trends.daily.at(-1)!;
+    const { container } = renderApp("daily", {
+      ...snapshot,
+      trends: {
+        ...snapshot.trends,
+        daily: [
+          ...snapshot.trends.daily.slice(0, -1),
+          { ...currentDaily, "antigravity-cli": 90 }
+        ]
+      }
+    });
+
+    const cliSegment = container.querySelector<HTMLElement>(
+      ".chart-column.in-progress .bar-segment.source-antigravity-cli"
+    )!;
+    expect(Number.parseFloat(cliSegment.style.height)).toBeGreaterThan(0);
+    expect(getComputedStyle(cliSegment).backgroundColor).toBe("rgb(76, 175, 80)");
+  });
+
   it("uses English axis labels when the device default locale is non-English", async () => {
     const nativeDateTimeFormat = Intl.DateTimeFormat;
     vi.resetModules();
