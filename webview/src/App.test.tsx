@@ -367,7 +367,7 @@ describe("App", () => {
     expect(container.querySelector(".bar-partial.source-antigravity")).not.toBeNull();
   });
 
-  it("renders a non-zero Antigravity CLI chart segment with a visible source color", () => {
+  it("renders a non-zero Antigravity CLI chart segment with the required source color", () => {
     const currentDaily = snapshot.trends.daily.at(-1)!;
     const { container } = renderApp("daily", {
       ...snapshot,
@@ -384,7 +384,16 @@ describe("App", () => {
       ".chart-column.in-progress .bar-segment.source-antigravity-cli"
     )!;
     expect(Number.parseFloat(cliSegment.style.height)).toBeGreaterThan(0);
-    expect(getComputedStyle(cliSegment).backgroundColor).toBe("rgb(76, 175, 80)");
+    const styles = getComputedStyle(cliSegment);
+    expect(styles.background).toBe("var(--source-color)");
+    const sourceColor = styles.getPropertyValue("--source-color").trim();
+    expect(sourceColor).toBe("#a78bfa");
+
+    const colorSwatch = document.createElement("div");
+    colorSwatch.style.backgroundColor = sourceColor;
+    document.body.append(colorSwatch);
+    expect(getComputedStyle(colorSwatch).backgroundColor).toBe("rgb(167, 139, 250)");
+    colorSwatch.remove();
   });
 
   it("uses English axis labels when the device default locale is non-English", async () => {

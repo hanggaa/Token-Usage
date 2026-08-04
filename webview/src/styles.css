@@ -286,7 +286,8 @@ tr:focus-visible {
 }
 
 .source-antigravity-cli {
-  background: #4caf50;
+  --source-color: #a78bfa;
+  background: var(--source-color);
 }
 
 .chart {
