@@ -124,6 +124,19 @@ describe("buildPeriodComparison", () => {
     expect(comparison.movers.sources.omittedCount).toBe(1);
   });
 
+  it("labels Antigravity CLI separately from Antigravity IDE movers", () => {
+    const now = new Date(2026, 6, 24, 12);
+    const comparison = buildPeriodComparison([
+      turn("ide", new Date(2026, 6, 24, 10), 40, "exact", "antigravity"),
+      turn("cli", new Date(2026, 6, 24, 10), 90, "exact", "antigravity-cli")
+    ], "daily", now);
+
+    expect(comparison.movers.sources.increases.map(({ key, label }) => ({ key, label }))).toEqual([
+      { key: "antigravity-cli", label: "Antigravity CLI" },
+      { key: "antigravity", label: "Antigravity IDE" }
+    ]);
+  });
+
   it("builds all selector granularities in one snapshot contract", () => {
     expect(Object.keys(buildUsageComparisons([], new Date(2026, 6, 24, 12)))).toEqual([
       "daily",

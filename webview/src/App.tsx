@@ -47,7 +47,8 @@ const SOURCE_LABELS: Record<Source, string> = {
   codex: "Codex",
   claude: "Claude Code",
   opencode: "OpenCode",
-  antigravity: "Antigravity"
+  antigravity: "Antigravity IDE",
+  "antigravity-cli": "Antigravity CLI"
 };
 
 const GRANULARITY_LABELS: Record<UsageGranularity, string> = {
@@ -319,7 +320,7 @@ function ImportHealth({ snapshot }: { snapshot: DashboardSnapshot }) {
             <>
               <span>
                 <i className={`health-dot ${healthy ? "healthy" : "warning"}`} />
-                {SOURCE_LABELS[source]} {source === "antigravity" ? "IDE" : "CLI"}
+                {SOURCE_LABELS[source]}
               </span>
               <strong className={healthy ? "healthy-text" : "warning-text"}>
                 {status}

@@ -53,13 +53,13 @@ const snapshot: DashboardSnapshot = {
   },
   trends: {
     daily: [
-      { startDate: "2026-07-22", endDate: "2026-07-22", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0 }
+      { startDate: "2026-07-22", endDate: "2026-07-22", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0, "antigravity-cli": 0 }
     ],
     weekly: [
-      { startDate: "2026-07-20", endDate: "2026-07-26", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0 }
+      { startDate: "2026-07-20", endDate: "2026-07-26", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0, "antigravity-cli": 0 }
     ],
     monthly: [
-      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0 }
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: true, codex: 1_000, claude: 0, opencode: 0, antigravity: 0, "antigravity-cli": 0 }
     ]
   },
   budgets: { daily: 0, weekly: 0, monthly: 0 },

@@ -52,7 +52,7 @@ it("ranks three contributors with unknown grouping, shares, and partial flags", 
   expect(insights.contributors.sources.map(({ label, tokens }) => ({ label, tokens }))).toEqual([
     { label: "Codex", tokens: 600 },
     { label: "OpenCode", tokens: 300 },
-    { label: "Antigravity", tokens: 100 }
+    { label: "Antigravity IDE", tokens: 100 }
   ]);
   expect(insights.contributors.models[0].share).toBeCloseTo(0.6);
   expect(insights.contributors.models.some((item) => item.label === "Unknown")).toBe(true);
@@ -74,6 +74,18 @@ it("labels Claude Code as a source contributor", () => {
 
   expect(insights.contributors.sources).toEqual([
     expect.objectContaining({ key: "claude", label: "Claude Code", tokens: 100 })
+  ]);
+});
+
+it("labels Antigravity CLI separately from Antigravity IDE", () => {
+  const insights = buildUsageInsights([
+    turn("ide", new Date(2026, 6, 22, 9), "antigravity", "gemini", "/work/ide", 40, "exact"),
+    turn("cli", new Date(2026, 6, 22, 10), "antigravity-cli", "gemini", "/work/cli", 90, "exact")
+  ], new Date(2026, 6, 22, 12)).daily;
+
+  expect(insights.contributors.sources.map(({ key, label }) => ({ key, label }))).toEqual([
+    { key: "antigravity-cli", label: "Antigravity CLI" },
+    { key: "antigravity", label: "Antigravity IDE" }
   ]);
 });
 

@@ -107,16 +107,16 @@ const snapshot: DashboardSnapshot = {
   },
   trends: {
     daily: [
-      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: null },
-      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, partialSources: ["antigravity"] }
+      { startDate: "2026-07-08", endDate: "2026-07-08", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: null, "antigravity-cli": null },
+      { startDate: "2026-07-09", endDate: "2026-07-09", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": null, partialSources: ["antigravity"] }
     ],
     weekly: [
-      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
-      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50 }
+      { startDate: "2026-07-06", endDate: "2026-07-12", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, "antigravity-cli": null, partialSources: ["antigravity"] },
+      { startDate: "2026-07-13", endDate: "2026-07-19", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": null }
     ],
     monthly: [
-      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, partialSources: ["antigravity"] },
-      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50 }
+      { startDate: "2026-07-01", endDate: "2026-07-31", inProgress: false, codex: 200, claude: null, opencode: 100, antigravity: 50, "antigravity-cli": null, partialSources: ["antigravity"] },
+      { startDate: "2026-08-01", endDate: "2026-08-31", inProgress: true, codex: 600, claude: null, opencode: 200, antigravity: 50, "antigravity-cli": null }
     ]
   },
   budgets: { daily: 100, weekly: 250, monthly: 2_000 },
@@ -419,7 +419,8 @@ describe("App", () => {
             codex: 200,
             claude: null,
             opencode: 100,
-            antigravity: 50
+            antigravity: 50,
+            "antigravity-cli": null
           },
           {
             startDate: "2026-12-28",
@@ -428,7 +429,8 @@ describe("App", () => {
             codex: 600,
             claude: null,
             opencode: 200,
-            antigravity: 50
+            antigravity: 50,
+            "antigravity-cli": null
           }
         ]
       }
@@ -450,11 +452,11 @@ describe("App", () => {
 
     expect(screen.getByText("Jul 27–Aug 2").closest(".chart-column")).toHaveAttribute(
       "title",
-      "July 27, 2026–August 2, 2026\nTotal: 350\nCodex: 200\nClaude Code: Unavailable\nOpenCode: 100\nAntigravity: 50"
+      "July 27, 2026–August 2, 2026\nTotal: 350\nCodex: 200\nClaude Code: Unavailable\nOpenCode: 100\nAntigravity IDE: 50\nAntigravity CLI: Unavailable"
     );
     expect(screen.getByText("Dec 28–Jan 3").closest(".chart-column")).toHaveAttribute(
       "title",
-      "December 28, 2026–January 3, 2027\nTotal: 850\nCodex: 600\nClaude Code: Unavailable\nOpenCode: 200\nAntigravity: 50"
+      "December 28, 2026–January 3, 2027\nTotal: 850\nCodex: 600\nClaude Code: Unavailable\nOpenCode: 200\nAntigravity IDE: 50\nAntigravity CLI: Unavailable"
     );
   });
 });

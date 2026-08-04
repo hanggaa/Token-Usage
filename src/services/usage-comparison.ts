@@ -19,7 +19,8 @@ const SOURCE_LABELS: Record<Source, string> = {
   codex: "Codex",
   claude: "Claude Code",
   opencode: "OpenCode",
-  antigravity: "Antigravity"
+  antigravity: "Antigravity IDE",
+  "antigravity-cli": "Antigravity CLI"
 };
 
 interface ContributorIdentity {

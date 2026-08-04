@@ -151,6 +151,23 @@ describe("buildDashboardSnapshot", () => {
     }
   });
 
+  it("aggregates Antigravity CLI separately from Antigravity IDE", () => {
+    const snapshot = buildDashboardSnapshot(
+      [
+        turn("ide", localTimestamp(2026, 6, 9), "antigravity", 40, "partial"),
+        turn("cli", localTimestamp(2026, 6, 9), "antigravity-cli", 90, "exact")
+      ],
+      [],
+      new Date(2026, 6, 9, 12)
+    );
+
+    expect(snapshot.trends.daily.at(-1)).toMatchObject({
+      antigravity: 40,
+      "antigravity-cli": 90,
+      partialSources: ["antigravity"]
+    });
+  });
+
   it("builds 14 daily, 12 Monday-based weekly, and 12 monthly buckets", () => {
     const snapshot = buildDashboardSnapshot([], [], new Date(2026, 6, 22, 12));
 

@@ -1,4 +1,9 @@
-export type Source = "codex" | "claude" | "opencode" | "antigravity";
+export type Source =
+  | "codex"
+  | "claude"
+  | "opencode"
+  | "antigravity"
+  | "antigravity-cli";
 
 export type ExecutionScope = "main" | "subagent";
 

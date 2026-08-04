@@ -33,7 +33,8 @@ function emptySources(): Record<Source, SourceAccumulator> {
     codex: { value: 0, seen: false, qualities: new Set() },
     claude: { value: 0, seen: false, qualities: new Set() },
     opencode: { value: 0, seen: false, qualities: new Set() },
-    antigravity: { value: 0, seen: false, qualities: new Set() }
+    antigravity: { value: 0, seen: false, qualities: new Set() },
+    "antigravity-cli": { value: 0, seen: false, qualities: new Set() }
   };
 }
 
@@ -70,6 +71,9 @@ function buildTrend(turns: NormalizedTurn[], periods: CalendarPeriod[]): TrendPo
       claude: sourceValues.claude.seen ? sourceValues.claude.value : null,
       opencode: sourceValues.opencode.seen ? sourceValues.opencode.value : null,
       antigravity: sourceValues.antigravity.seen ? sourceValues.antigravity.value : null,
+      "antigravity-cli": sourceValues["antigravity-cli"].seen
+        ? sourceValues["antigravity-cli"].value
+        : null,
       partialSources: SOURCES.filter((source) =>
         sourceValues[source].qualities.has("partial")
       )

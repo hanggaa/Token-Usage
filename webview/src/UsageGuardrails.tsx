@@ -29,7 +29,8 @@ const sourceLabels = {
   codex: "Codex",
   claude: "Claude Code",
   opencode: "OpenCode",
-  antigravity: "Antigravity"
+  antigravity: "Antigravity IDE",
+  "antigravity-cli": "Antigravity CLI"
 };
 const budgetKeys: Array<keyof UsageBudgets> = ["daily", "weekly", "monthly"];
 const numberFormatter = new Intl.NumberFormat();

@@ -128,6 +128,7 @@ export interface TrendPoint {
   claude: number | null;
   opencode: number | null;
   antigravity: number | null;
+  "antigravity-cli": number | null;
   partialSources?: Source[];
 }
 
@@ -163,4 +164,10 @@ export type BudgetResponse = Extract<
   { type: "budgetsSaved" | "budgetError" }
 >;
 
-export const SOURCES: Source[] = ["codex", "claude", "opencode", "antigravity"];
+export const SOURCES: Source[] = [
+  "codex",
+  "claude",
+  "opencode",
+  "antigravity",
+  "antigravity-cli"
+];
