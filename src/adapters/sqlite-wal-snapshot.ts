@@ -75,7 +75,15 @@ export async function readSqliteSnapshot(
     const before = await io.stat(databasePath);
     const databaseBytes = await io.readFile(databasePath);
     const walBefore = await optionalStat(walPath, io);
-    const walBytes = walBefore ? await io.readFile(walPath) : null;
+    let walBytes: Uint8Array | null = null;
+    if (walBefore) {
+      try {
+        walBytes = await io.readFile(walPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+    }
     const after = await io.stat(databasePath);
     const walAfter = await optionalStat(walPath, io);
 

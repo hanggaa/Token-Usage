@@ -122,6 +122,41 @@ describe("readSqliteSnapshot", () => {
     expect(byteFromPage(snapshot, 1)).toBe(0x22);
   });
 
+  it("retries when a WAL disappears between its stat and read", async () => {
+    const firstDatabase = databaseWithPages([page(1, 0x11)]);
+    const stableDatabase = databaseWithPages([page(1, 0x22)]);
+    const wal = walFile([frame(1, 1, page(1, 0x33))]);
+    let databaseReads = 0;
+    let walStats = 0;
+    const io: SnapshotIo = {
+      async readFile(path) {
+        if (path.endsWith("-wal")) {
+          const error = new Error("WAL disappeared") as NodeJS.ErrnoException;
+          error.code = "ENOENT";
+          throw error;
+        }
+        databaseReads += 1;
+        return databaseReads === 1 ? firstDatabase : stableDatabase;
+      },
+      async stat(path) {
+        if (!path.endsWith("-wal")) {
+          return { size: stableDatabase.byteLength, mtimeMs: 1 };
+        }
+        walStats += 1;
+        if (walStats === 1) {
+          return { size: wal.byteLength, mtimeMs: 1 };
+        }
+        const error = new Error("WAL missing") as NodeJS.ErrnoException;
+        error.code = "ENOENT";
+        throw error;
+      }
+    };
+
+    const snapshot = await readSqliteSnapshot("/history/state.vscdb", { io });
+
+    expect(byteFromPage(snapshot, 1)).toBe(0x22);
+  });
+
   it("fails after all three reads change", async () => {
     const database = databaseWithPages([page(1, 0x11)]);
     const io = alwaysChangingIo(database);
@@ -144,6 +179,30 @@ describe("readSqliteSnapshot", () => {
           throw error;
         }
         return { size: database.byteLength, mtimeMs: 1 };
+      }
+    };
+
+    await expect(readSqliteSnapshot("/history/state.vscdb", { io })).rejects.toMatchObject({
+      code: "EACCES"
+    });
+  });
+
+  it("propagates WAL read errors other than ENOENT", async () => {
+    const database = databaseWithPages([page(1, 0x11)]);
+    const wal = walFile([frame(1, 1, page(1, 0x22))]);
+    const io: SnapshotIo = {
+      async readFile(path) {
+        if (path.endsWith("-wal")) {
+          const error = new Error("permission denied") as NodeJS.ErrnoException;
+          error.code = "EACCES";
+          throw error;
+        }
+        return database;
+      },
+      async stat(path) {
+        return path.endsWith("-wal")
+          ? { size: wal.byteLength, mtimeMs: 1 }
+          : { size: database.byteLength, mtimeMs: 1 };
       }
     };
 
