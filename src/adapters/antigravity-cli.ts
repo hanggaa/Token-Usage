@@ -41,6 +41,7 @@ export interface AntigravityCliParseIssue {
 }
 
 interface PendingTurn {
+  stepIndex: number;
   turnId: string;
   timestamp: string;
   prompt: string;
@@ -54,6 +55,12 @@ const DONE_STATUS = 3;
 const USER_INPUT_STEP = 14;
 const PLANNER_RESPONSE_STEP = 15;
 const EPOCH = new Date(0).toISOString();
+const MAXIMUM_SAFE_TOKENS = BigInt(Number.MAX_SAFE_INTEGER);
+
+interface MetricResult {
+  metrics: TokenMetric[];
+  issues: string[];
+}
 
 function unavailable(kind: TokenMetric["kind"], basis: string): TokenMetric {
   return { kind, value: null, quality: "unavailable", basis };
@@ -62,52 +69,71 @@ function unavailable(kind: TokenMetric["kind"], basis: string): TokenMetric {
 function sumUsage(
   usages: AntigravityCliUsage[],
   select: (usage: AntigravityCliUsage) => readonly number[]
-): number {
-  const total = usages.reduce(
+): bigint {
+  return usages.reduce(
     (sum, usage) => select(usage).reduce(
       (usageSum, value) => usageSum + BigInt(value),
       sum
     ),
     0n
   );
-  if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error("Antigravity CLI token usage exceeds JavaScript's safe integer range");
-  }
-  return Number(total);
 }
 
-function exactMetrics(usages: AntigravityCliUsage[]): TokenMetric[] {
+function exactMetric(
+  kind: TokenMetric["kind"],
+  value: bigint,
+  basis: string,
+  label: string
+): { metric: TokenMetric; issue: string | null } {
+  if (value > MAXIMUM_SAFE_TOKENS) {
+    return {
+      metric: unavailable(kind, `${basis} exceeds JavaScript's safe integer range`),
+      issue: `Antigravity CLI ${label} exceeds JavaScript's safe integer range`
+    };
+  }
+  return {
+    metric: { kind, value: Number(value), quality: "exact", basis },
+    issue: null
+  };
+}
+
+function exactMetrics(usages: AntigravityCliUsage[]): MetricResult {
   const requestInput = sumUsage(
     usages,
     (usage) => [usage.inputTokens, usage.cacheReadTokens, usage.cacheWriteTokens]
   );
-  const metrics: TokenMetric[] = [
-    {
-      kind: "request_input",
-      value: requestInput,
-      quality: "exact",
-      basis: "recorded input + cache read + cache write"
-    },
-    {
-      kind: "cached_input",
-      value: sumUsage(usages, (usage) => [usage.cacheReadTokens]),
-      quality: "exact",
-      basis: "recorded cache-read tokens"
-    },
-    {
-      kind: "output",
-      value: sumUsage(usages, (usage) => [usage.outputTokens]),
-      quality: "exact",
-      basis: "recorded output tokens, including thinking and response subsets"
-    },
-    {
-      kind: "reasoning_output",
-      value: sumUsage(usages, (usage) => [usage.thinkingOutputTokens]),
-      quality: "exact",
-      basis: "recorded thinking-output subset"
-    }
+  const results = [
+    exactMetric(
+      "request_input",
+      requestInput,
+      "recorded input + cache read + cache write",
+      "request input"
+    ),
+    exactMetric(
+      "cached_input",
+      sumUsage(usages, (usage) => [usage.cacheReadTokens]),
+      "recorded cache-read tokens",
+      "cached input"
+    ),
+    exactMetric(
+      "output",
+      sumUsage(usages, (usage) => [usage.outputTokens]),
+      "recorded output tokens, including thinking and response subsets",
+      "output"
+    ),
+    exactMetric(
+      "reasoning_output",
+      sumUsage(usages, (usage) => [usage.thinkingOutputTokens]),
+      "recorded thinking-output subset",
+      "reasoning output"
+    )
   ];
-  return metrics;
+  return {
+    metrics: results.map((result) => result.metric),
+    issues: results
+      .map((result) => result.issue)
+      .filter((issue): issue is string => issue != null)
+  };
 }
 
 function estimatedMetrics(
@@ -144,16 +170,37 @@ function estimatedMetrics(
   ];
 }
 
-function turnMetrics(pending: PendingTurn): TokenMetric[] {
+function totalMetric(metrics: TokenMetric[]): { metric: TokenMetric; issue: string | null } {
+  const requestInput = metrics.find((metric) => metric.kind === "request_input");
+  const output = metrics.find((metric) => metric.kind === "output");
+  if (requestInput?.value != null && output?.value != null) {
+    const total = BigInt(requestInput.value) + BigInt(output.value);
+    if (total > MAXIMUM_SAFE_TOKENS) {
+      return {
+        metric: unavailable(
+          "total",
+          "recorded request input + output exceeds JavaScript's safe integer range"
+        ),
+        issue: "Antigravity CLI total exceeds JavaScript's safe integer range"
+      };
+    }
+  }
+  return { metric: calculateTotalMetric(metrics), issue: null };
+}
+
+function turnMetrics(pending: PendingTurn): MetricResult {
   const response = pending.responses.join("\n\n");
   const metrics: TokenMetric[] = [estimateTypedInput(pending.prompt, pending.model)];
-  metrics.push(...(
-    pending.usages.length > 0
-      ? exactMetrics(pending.usages)
-      : estimatedMetrics(pending.prompt, response, pending.model)
-  ));
-  metrics.push(calculateTotalMetric(metrics));
-  return metrics;
+  const result = pending.usages.length > 0
+    ? exactMetrics(pending.usages)
+    : { metrics: estimatedMetrics(pending.prompt, response, pending.model), issues: [] };
+  metrics.push(...result.metrics);
+  const total = totalMetric(metrics);
+  metrics.push(total.metric);
+  return {
+    metrics,
+    issues: total.issue ? [...result.issues, total.issue] : result.issues
+  };
 }
 
 export function parseAntigravityCliConversation(
@@ -172,6 +219,12 @@ export function parseAntigravityCliConversation(
     if (pending.usages.length === 0) {
       usedEstimatedFallback = true;
     }
+    const metricResult = turnMetrics(pending);
+    const stepIndex = pending.stepIndex;
+    issues.push(...metricResult.issues.map((message) => ({
+      idx: stepIndex,
+      message
+    })));
     const turn: NormalizedTurn = {
       id: `antigravity-cli:${input.conversationId}:${pending.turnId}`,
       source: "antigravity-cli",
@@ -185,7 +238,7 @@ export function parseAntigravityCliConversation(
       prompt: pending.prompt,
       response,
       toolEventCount: 0,
-      metrics: turnMetrics(pending),
+      metrics: metricResult.metrics,
       fingerprint: ""
     };
     turn.fingerprint = fingerprint(turn);
@@ -197,6 +250,9 @@ export function parseAntigravityCliConversation(
   for (const row of rows) {
     if (row.status !== DONE_STATUS) {
       continue;
+    }
+    if (row.stepType === USER_INPUT_STEP) {
+      finalize();
     }
 
     let step;
@@ -214,8 +270,8 @@ export function parseAntigravityCliConversation(
     }
 
     if (step.stepType === USER_INPUT_STEP) {
-      finalize();
       pending = {
+        stepIndex: step.idx,
         turnId: String(step.idx),
         timestamp: step.timestamp ?? EPOCH,
         prompt: step.prompt?.trim() ?? "",

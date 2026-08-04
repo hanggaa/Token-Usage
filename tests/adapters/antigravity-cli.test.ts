@@ -231,4 +231,80 @@ describe("parseAntigravityCliConversation", () => {
     ]);
     expect(() => decodeAntigravityCliStep(malformedPlanner)).toThrow();
   });
+
+  it("marks cross-record aggregate overflow unavailable instead of throwing", () => {
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "Overflow safely.", "2026-08-04T08:00:00.000Z"),
+      plannerStep(1, "First.", {
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        provider: 24
+      }),
+      plannerStep(2, "Second.", {
+        inputTokens: 1,
+        outputTokens: 0,
+        provider: 24
+      })
+    ]));
+
+    expect(metricsByKind(parsed)).toMatchObject({
+      request_input: { value: null, quality: "unavailable" },
+      output: { value: 0, quality: "exact" },
+      total: { value: null, quality: "unavailable" }
+    });
+    expect(parsed.issues).toEqual([
+      expect.objectContaining({
+        idx: 0,
+        message: expect.stringContaining("request input")
+      })
+    ]);
+  });
+
+  it("marks an unsafe request-plus-output total unavailable", () => {
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "Overflow only the total.", "2026-08-04T08:30:00.000Z"),
+      plannerStep(1, "Result.", {
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 1,
+        provider: 24
+      })
+    ]));
+
+    expect(metricsByKind(parsed)).toMatchObject({
+      request_input: { value: Number.MAX_SAFE_INTEGER, quality: "exact" },
+      output: { value: 1, quality: "exact" },
+      total: { value: null, quality: "unavailable" }
+    });
+    expect(parsed.issues).toEqual([
+      expect.objectContaining({ idx: 0, message: expect.stringContaining("total") })
+    ]);
+  });
+
+  it("keeps a malformed completed user row as a hard turn boundary", () => {
+    const malformedUser: AntigravityCliStepRow = {
+      ...userStep(2, "Unreadable.", "2026-08-04T09:01:00.000Z"),
+      stepPayload: Uint8Array.from([0x9a, 0x01, 0x05, 0x61])
+    };
+    const parsed = parseAntigravityCliConversation(conversation([
+      userStep(0, "First turn.", "2026-08-04T09:00:00.000Z"),
+      plannerStep(1, "First response.", {
+        inputTokens: 10,
+        outputTokens: 2,
+        provider: 24
+      }),
+      malformedUser,
+      plannerStep(3, "Must not attach.", {
+        inputTokens: 100,
+        outputTokens: 20,
+        provider: 24
+      })
+    ]));
+
+    expect(parsed.turns).toHaveLength(1);
+    expect(parsed.turns[0].response).toBe("First response.");
+    expect(metricsByKind(parsed).total).toMatchObject({ value: 12, quality: "exact" });
+    expect(parsed.issues).toEqual([
+      expect.objectContaining({ idx: 2, message: expect.stringContaining("protobuf") })
+    ]);
+  });
 });
