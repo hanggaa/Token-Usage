@@ -10,6 +10,8 @@ import {
 import type { AntigravityCliStepRow } from "../../src/adapters/antigravity-cli.js";
 import {
   plannerStep,
+  plannerStepWithInternalContent,
+  plannerStepWithInternalMarker,
   plannerStepWithoutUsage,
   userStep
 } from "../helpers/antigravity-cli-fixtures.js";
@@ -97,6 +99,46 @@ afterEach(async () => {
 });
 
 describe("AntigravityCliAdapter", () => {
+  it("keeps usage-only internal planner steps healthy and counts their tokens", async () => {
+    const root = await temporaryRoot();
+    const conversationPath = await discoveredDatabase(root, "internal-planner.db");
+    const bytes = await conversationDatabase("cascade-internal", [
+      userStep(0, "Complete this task.", "2026-08-04T00:30:00.000Z"),
+      plannerStepWithInternalContent(1, {
+        inputTokens: 30,
+        outputTokens: 10,
+        provider: 24
+      }),
+      plannerStepWithInternalMarker(2, {
+        inputTokens: 7,
+        outputTokens: 3,
+        provider: 24
+      }),
+      plannerStep(3, "Task complete.", {
+        inputTokens: 5,
+        outputTokens: 2,
+        provider: 24
+      })
+    ]);
+
+    const result = await new AntigravityCliAdapter(
+      root,
+      undefined,
+      async () => bytes
+    ).scan();
+
+    expect(result.complete).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.fullyObservedSessionIds).toEqual(["cascade-internal"]);
+    expect(result.turns).toHaveLength(1);
+    expect(result.turns[0]).toMatchObject({ response: "Task complete." });
+    expect(result.turns[0].metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "request_input", value: 42, quality: "exact" }),
+      expect.objectContaining({ kind: "output", value: 15, quality: "exact" }),
+      expect.objectContaining({ kind: "total", value: 57, quality: "exact" })
+    ]));
+  });
+
   it("isolates a failed conversation snapshot while retaining exact usage", async () => {
     const root = await temporaryRoot();
     const readablePath = await discoveredDatabase(root, "a-readable.db");

@@ -22,6 +22,7 @@ const GENERATOR_MODEL_FIELD = 11;
 const USER_RESPONSE_FIELD = 2;
 const PLANNER_RESPONSE_FIELD = 3;
 const MODIFIED_RESPONSE_FIELD = 8;
+const INTERNAL_PLANNER_MARKER_FIELD = 12;
 
 export interface AntigravityCliUsage {
   modelCode: number | null;
@@ -128,11 +129,14 @@ function requiredBytes(
   return value;
 }
 
-function decodedResponse(payload: Uint8Array): string {
+function decodedResponse(payload: Uint8Array): string | null {
   const fields = decodeProtobufMessage(payload);
   const modified = utf8Value(fields, MODIFIED_RESPONSE_FIELD);
   const original = utf8Value(fields, PLANNER_RESPONSE_FIELD);
   if (modified == null && original == null) {
+    const isInternalPlannerRecord =
+      varintValue(fields, INTERNAL_PLANNER_MARKER_FIELD) != null;
+    if (isInternalPlannerRecord) return null;
     throw new Error("Antigravity CLI planner response content is missing");
   }
   return modified?.trim() ? modified : (original ?? "");

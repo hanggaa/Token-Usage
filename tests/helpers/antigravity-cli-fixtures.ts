@@ -142,6 +142,41 @@ export function plannerStepWithUsages(
   return step(idx, 15, 3, stepMetadata, 20, stringField(8, response));
 }
 
+export function plannerStepWithInternalContent(
+  idx: number,
+  usageValue: UsageFixture,
+  timestampValue?: string
+): AntigravityCliStepRow {
+  const stepMetadata = metadata(timestampValue, [usageValue]);
+  const payload = concat(
+    bytesField(6, Uint8Array.from([1, 2, 3, 4])),
+    stringField(7, "Internal planner content."),
+    varintField(12, 1)
+  );
+  return step(idx, 15, 3, stepMetadata, 20, payload);
+}
+
+export function plannerStepWithInternalMarker(
+  idx: number,
+  usageValue: UsageFixture
+): AntigravityCliStepRow {
+  return step(
+    idx,
+    15,
+    3,
+    metadata(undefined, [usageValue]),
+    20,
+    varintField(12, 1)
+  );
+}
+
+export function plannerStepWithEmptyPayload(
+  idx: number,
+  usageValue: UsageFixture
+): AntigravityCliStepRow {
+  return step(idx, 15, 3, metadata(undefined, [usageValue]), 20, new Uint8Array());
+}
+
 export function plannerStepWithoutUsage(
   idx: number,
   response: string,

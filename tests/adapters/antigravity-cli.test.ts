@@ -10,6 +10,7 @@ import {
 import {
   completedStep,
   plannerStep,
+  plannerStepWithEmptyPayload,
   plannerStepWithOriginalResponse,
   plannerStepWithUsages,
   plannerStepWithoutUsage,
@@ -40,6 +41,18 @@ function metricsByKind(parsed: ReturnType<typeof parseAntigravityCliConversation
 }
 
 describe("parseAntigravityCliConversation", () => {
+  it("rejects an empty planner payload instead of silently hiding schema loss", () => {
+    const planner = plannerStepWithEmptyPayload(1, {
+      inputTokens: 5,
+      outputTokens: 2,
+      provider: 24
+    });
+
+    expect(() => decodeAntigravityCliStep(planner)).toThrow(
+      "Antigravity CLI planner response content is missing"
+    );
+  });
+
   it("maps recorded cache and reasoning usage without double counting", () => {
     const parsed = parseAntigravityCliConversation(conversation([
       userStep(0, "Fix the importer.", "2026-08-04T01:00:00.000Z"),
